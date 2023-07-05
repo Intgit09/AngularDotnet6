@@ -1,0 +1,71 @@
+public async Task<IActionResult> UploadChunk()
+{
+    // Get chunk information from request headers
+    var chunkIndex = Request.Headers["X-Chunk-Index"];
+    var totalChunks = Request.Headers["X-Total-Chunks"];
+
+    // Check if all chunks have been received
+    if (string.IsNullOrEmpty(chunkIndex) || string.IsNullOrEmpty(totalChunks))
+    {
+        return BadRequest("Invalid chunk information");
+    }
+
+    // Retrieve the uploaded chunk from the request body
+    using (var memoryStream = new MemoryStream())
+    {
+        await Request.Body.CopyToAsync(memoryStream);
+        var chunkBytes = memoryStream.ToArray();
+
+        // Create a unique folder for each file upload
+        var uploadFolder = Path.Combine("Uploads", Guid.NewGuid().ToString());
+        Directory.CreateDirectory(uploadFolder);
+
+        // Save the chunk to the upload folder
+        var chunkFileName = $"{chunkIndex}.chunk";
+        var chunkFilePath = Path.Combine(uploadFolder, chunkFileName);
+
+        await System.IO.File.WriteAllBytesAsync(chunkFilePath, chunkBytes);
+    }
+
+    // Check if all chunks have been received
+    var currentChunkIndex = int.Parse(chunkIndex);
+    var totalChunkCount = int.Parse(totalChunks);
+    if (currentChunkIndex == totalChunkCount - 1)
+    {
+        // All chunks have been uploaded, combine the chunks into a single file
+        var mergedFileName = "merged_file.ext"; // Customize the file name and extension
+        var mergedFilePath = Path.Combine("Uploads", mergedFileName); // Customize the path as per your requirements
+
+        using (var mergedFileStream = new FileStream(mergedFilePath, FileMode.Create))
+        {
+            for (var i = 0; i < totalChunkCount; i++)
+            {
+                var chunkFolder = Path.Combine("Uploads", i.ToString());
+                var chunkFilePath = Path.Combine(chunkFolder, $"{i}.chunk");
+
+                if (System.IO.File.Exists(chunkFilePath))
+                {
+                    using (var chunkFileStream = new FileStream(chunkFilePath, FileMode.Open))
+                    {
+                        await chunkFileStream.CopyToAsync(mergedFileStream);
+                    }
+
+                    // Delete the chunk file and its folder after merging
+                    System.IO.File.Delete(chunkFilePath);
+                    Directory.Delete(chunkFolder);
+                }
+                else
+                {
+                    // Handle missing chunk file or other error scenario
+                    return BadRequest("Chunk file is missing or corrupted");
+                }
+            }
+        }
+
+        // Perform further processing or save the merged file as needed
+
+        return Ok("File upload complete.");
+    }
+
+    return Ok("Chunk uploaded successfully.");
+}
