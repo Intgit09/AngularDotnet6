@@ -1,78 +1,80 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
-namespace FilezipUpload.Controllers
+[Route("api/[controller]")]
+[ApiController]
+public class FileUploadController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class FileUploadController : ControllerBase
+    private const string UploadsDirectory = "Uploads";
+
+    [HttpPost("upload/{fileName}/{fileExt}")]
+    public async Task<IActionResult> UploadChunk(string fileName,string 
+        fileExt)
     {
-        private const string UploadsDirectory = "Uploads";
-        [HttpPost("upload")]
-        public async Task<IActionResult> UploadChunk()
+        // Get chunk information from request headers
+        var chunkIndex = Request.Headers["X-Chunk-Index"];
+        var totalChunks = Request.Headers["X-Total-Chunks"];
+
+        // Check if all chunks have been received
+        if (string.IsNullOrEmpty(chunkIndex) || string.IsNullOrEmpty(totalChunks))
         {
-            // Get chunk information from request headers
-            var chunkIndex = Request.Headers["X-Chunk-Index"];
-            var totalChunks = Request.Headers["X-Total-Chunks"];
+            return BadRequest(new { error = "Invalid chunk information" });
+        }
 
-            // Check if all chunks have been received
-            if (string.IsNullOrEmpty(chunkIndex) || string.IsNullOrEmpty(totalChunks))
+        // Retrieve the uploaded chunk from the request body
+        using (var memoryStream = new MemoryStream())
+        {
+            await Request.Body.CopyToAsync(memoryStream);
+            var chunkBytes = memoryStream.ToArray();
+
+            // Save the chunk to a temporary location, e.g., a directory on the server
+            var chunkFileName = $"{fileName}-{chunkIndex}-{totalChunks}.chunk";
+            var chunkFilePath = Path.Combine(UploadsDirectory, chunkFileName); // Customize the path as per your requirements
+
+            await System.IO.File.WriteAllBytesAsync(chunkFilePath, chunkBytes);
+        }
+
+        // Check if all chunks have been received
+        var currentChunkIndex = int.Parse(chunkIndex);
+        var totalChunkCount = int.Parse(totalChunks);
+        if (currentChunkIndex == totalChunkCount - 1)
+        {
+            // All chunks have been uploaded, combine the chunks into a single file
+            var mergedFileName = $"{fileName}.{fileExt}"; // Customize the file extension
+            var mergedFilePath = Path.Combine(UploadsDirectory, mergedFileName); // Customize the path as per your requirements
+
+            // Get all the chunk file paths
+            var chunkFiles = Directory.GetFiles(UploadsDirectory, $"{fileName}-*.chunk");
+
+            // Sort the chunk files based on their names
+            var sortedChunkFiles = chunkFiles.OrderBy(f => f);
+
+            // Combine the chunk files into a single file
+            using (var mergedFileStream = new FileStream(mergedFilePath, FileMode.Create))
             {
-                return BadRequest(new { error = "Invalid chunk information" });
-            }
-
-            // Retrieve the uploaded chunk from the request body
-            using (var memoryStream = new MemoryStream())
-            {
-                await Request.Body.CopyToAsync(memoryStream);
-                var chunkBytes = memoryStream.ToArray();
-
-                // Save the chunk to a temporary location, e.g., a directory on the server
-                var chunkFileName = $"{Guid.NewGuid()}.chunk";
-                var chunkFilePath = Path.Combine(UploadsDirectory, chunkFileName); // Customize the path as per your requirements
-
-                await System.IO.File.WriteAllBytesAsync(chunkFilePath, chunkBytes);
-            }
-
-            // Check if all chunks have been received
-            var currentChunkIndex = int.Parse(chunkIndex);
-            var totalChunkCount = int.Parse(totalChunks);
-            if (currentChunkIndex == totalChunkCount - 1)
-            {
-                // All chunks have been uploaded, combine the chunks into a single file
-                var mergedFileName = "merged_file.zip"; // Customize the file name and extension
-                var mergedFilePath = Path.Combine(UploadsDirectory, mergedFileName); // Customize the path as per your requirements
-
-                // Get all the chunk file paths
-                var chunkFiles = Directory.GetFiles(UploadsDirectory, "*.chunk");
-
-                // Sort the chunk files based on their names
-                var sortedChunkFiles = chunkFiles.OrderBy(f => f);
-
-                // Combine the chunk files into a single file
-                using (var mergedFileStream = new FileStream(mergedFilePath, FileMode.Create))
-                {
-                    foreach (var chunkFile in sortedChunkFiles)
-                    {
-                        using (var chunkFileStream = new FileStream(chunkFile, FileMode.Open))
-                        {
-                            await chunkFileStream.CopyToAsync(mergedFileStream);
-                        }
-                    }
-                }
-
-                // Delete the chunk files
                 foreach (var chunkFile in sortedChunkFiles)
                 {
-                    System.IO.File.Delete(chunkFile);
+                    using (var chunkFileStream = new FileStream(chunkFile, FileMode.Open))
+                    {
+                        await chunkFileStream.CopyToAsync(mergedFileStream);
+                    }
                 }
-
-                // Perform further processing or save the merged file as needed
-
-                return Ok(new { message = "File upload complete" });
             }
 
-            return Ok(new { message = "Chunk uploaded successfully" });
+            // Delete the chunk files
+            foreach (var chunkFile in sortedChunkFiles)
+            {
+                System.IO.File.Delete(chunkFile);
+            }
+
+            // Perform further processing or save the merged file as needed
+
+            return Ok(new { message = "File upload complete" });
         }
+
+        return Ok(new { message = "Chunk uploaded successfully" });
     }
 }
