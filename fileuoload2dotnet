@@ -77,4 +77,26 @@ public class FileUploadController : ControllerBase
 
         return Ok(new { message = "Chunk uploaded successfully" });
     }
+
+     [HttpPost("upload1")]
+    public async Task<IActionResult> Upload1(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { message = "No file was uploaded." });
+        }
+
+        // Save the file to a temporary location
+        var fileName = Path.GetFileName(file.FileName);
+        var filePath = Path.Combine(UploadsDirectory, fileName); // Customize the path as per your requirements
+
+        using (var fileStream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(fileStream);
+        }
+
+        // Perform further processing or save the file as needed
+
+        return Ok(new { message = "File upload complete." });
+    }
 }
