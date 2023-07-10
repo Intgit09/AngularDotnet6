@@ -1,0 +1,1 @@
+https://www.c-sharpcorner.com/article/upload-large-files-to-mvc-webapi-using-partitioning/
