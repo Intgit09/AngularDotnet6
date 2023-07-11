@@ -127,3 +127,176 @@ export class FileUploaderComponentComponent {
     return window.btoa(binary);
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using StackExchange.Redis;
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+
+[Route("api/[controller]")]
+[ApiController]
+public class FileUploadController : ControllerBase
+{
+    private const string UploadsDirectory = "Uploads";
+    private readonly IConnectionMultiplexer _redisConnection;
+
+    public FileUploadController(IConnectionMultiplexer redisConnection)
+    {
+        _redisConnection = redisConnection;
+    }
+
+    [HttpPost("upload/{fileName}/{fileExt}")]
+    public async Task<IActionResult> UploadChunk(string fileName, string fileExt)
+    {
+        // Get chunk information from request headers
+        var chunkIndex = Request.Headers["X-Chunk-Index"];
+        var totalChunks = Request.Headers["X-Total-Chunks"];
+
+        // Check if all chunks have been received
+        if (string.IsNullOrEmpty(chunkIndex) || string.IsNullOrEmpty(totalChunks))
+        {
+            return BadRequest(new { error = "Invalid chunk information" });
+        }
+
+        // Retrieve the uploaded chunk from the request body
+        using (var memoryStream = new MemoryStream())
+        {
+            await Request.Body.CopyToAsync(memoryStream);
+            var chunkBytes = memoryStream.ToArray();
+
+            // Save the chunk to Redis cache with Base64 encoding
+            var redisDb = _redisConnection.GetDatabase();
+            var redisKey = $"{fileName}-{chunkIndex}-{totalChunks}";
+            var redisValue = Convert.ToBase64String(chunkBytes);
+            redisDb.StringSet(redisKey, redisValue);
+        }
+
+        // Check if all chunks have been received
+        var currentChunkIndex = int.Parse(chunkIndex);
+        var totalChunkCount = int.Parse(totalChunks);
+        if (currentChunkIndex == totalChunkCount - 1)
+        {
+            // All chunks have been uploaded, combine the chunks into a single file
+            var mergedFileName = $"{fileName}.{fileExt}"; // Customize the file extension
+            var mergedFilePath = Path.Combine(UploadsDirectory, mergedFileName); // Customize the path as per your requirements
+
+            // Get all the chunk keys from Redis cache
+            var redisDb = _redisConnection.GetDatabase();
+            var redisKeys = redisDb.Execute("KEYS", $"{fileName}-*");
+
+            // Sort the chunk keys based on their names
+            var sortedChunkKeys = redisKeys.OrderBy(k => k.ToString());
+
+            // Combine the chunk data into a single file
+            using (var mergedFileStream = new FileStream(mergedFilePath, FileMode.Create))
+            {
+                foreach (var redisKey in sortedChunkKeys)
+                {
+                    var redisValue = redisDb.StringGet(redisKey);
+                    var chunkBytes = Convert.FromBase64String(redisValue);
+                    await mergedFileStream.WriteAsync(chunkBytes);
+                }
+            }
+
+            // Delete the chunk keys from Redis cache
+            foreach (var redisKey in sortedChunkKeys)
+            {
+                redisDb.KeyDelete(redisKey);
+            }
+
+            // Perform further processing or save the merged file as needed
+
+            return Ok(new { message = "File upload complete" });
+        }
+
+        return Ok(new { message = "Chunk uploaded successfully" });
+    }
+}
+
+
+
+
+<div>
+  <label for="fileInput">File:</label>
+  <input type="file" id="fileInput" (change)="handleFileChange($event)">
+</div>
+<div>
+  <label for="nameInput">Name:</label>
+  <input type="text" id="nameInput" [(ngModel)]="name">
+</div>
+<div>
+  <label for="emailInput">Email:</label>
+  <input type="email" id="emailInput" [(ngModel)]="email">
+</div>
+<div>
+  <label for="descriptionInput">Description:</label>
+  <textarea id="descriptionInput" [(ngModel)]="description"></textarea>
+</div>
+<button (click)="uploadChunks()">Upload</button>
+
+
+import { Component } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+
+@Component({
+  selector: 'app-file-uploader-component',
+  templateUrl: './file-uploader-component.component.html',
+  styleUrls: ['./file-uploader-component.component.scss']
+})
+export class FileUploaderComponentComponent {
+  selectedFile: File | null = null;
+  name: string = '';
+  email: string = '';
+  description: string = '';
+
+  constructor(private http: HttpClient) {}
+
+  handleFileChange(event: any): void {
+    this.selectedFile = event.target.files[0];
+  }
+
+  uploadChunks(): void {
+    if (!this.selectedFile) return;
+
+    // Create a FormData object to include the file and other fields
+    const formData = new FormData();
+    formData.append('file', this.selectedFile);
+    formData.append('name', this.name);
+    formData.append('email', this.email);
+    formData.append('description', this.description);
+
+    // Send the FormData to the server
+    this.http
+      .post('http://localhost:5080/api/FileUpload/UploadChunk', formData)
+      .subscribe(
+        (response) => {
+          console.log(response);
+          // Handle response from the server
+        },
+        (error) => {
+          console.error(error);
+          // Handle error response from the server
+        }
+      );
+  }
+}
+
+
+
