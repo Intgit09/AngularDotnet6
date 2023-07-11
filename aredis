@@ -403,6 +403,26 @@ public class FileUploadController : ControllerBase
 
 }
 
+private List<RedisKey> ScanRedisKeys(IDatabase redisDb, string pattern, int pageSize = 100)
+{
+    var keys = new List<RedisKey>();
+    long cursor = 0;
+    do
+    {
+        var scanResult = (RedisResult[])redisDb.Execute("SCAN", cursor.ToString(), "MATCH", pattern, "COUNT", pageSize.ToString());
+        cursor = long.Parse(scanResult[0].ToString());
+
+        foreach (var keyResult in (RedisKey[])scanResult[1])
+        {
+            keys.Add(keyResult);
+        }
+    }
+    while (cursor != 0);
+
+    return keys;
+}
+
+
 
 
 
