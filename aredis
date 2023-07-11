@@ -385,21 +385,22 @@ public class FileUploadController : ControllerBase
         return Ok(new { message = "Chunk uploaded successfully" });
     }
 
-    private IEnumerable<RedisKey> ScanRedisKeys(IDatabase redisDb, string pattern, int pageSize = 100)
+    private List<RedisKey> ScanRedisKeys(IDatabase redisDb, string pattern, int pageSize = 100)
+{
+    var keys = new List<RedisKey>();
+    long cursor = 0;
+    do
     {
-        var keys = new List<RedisKey>();
-        long cursor = 0;
-        do
-        {
-            var scanResult = redisDb.Execute("SCAN", cursor.ToString(), "MATCH", pattern, "COUNT", pageSize.ToString());
-            cursor = long.Parse(scanResult[0].ToString());
-            var scanKeys = (RedisResult[])scanResult[1];
-            keys.AddRange(scanKeys.Select(k => (RedisKey)k.ToString()));
-        }
-        while (cursor != 0);
-
-        return keys;
+        var scanResult = (RedisResult[])redisDb.Execute("SCAN", cursor.ToString(), "MATCH", pattern, "COUNT", pageSize.ToString());
+        cursor = long.Parse(scanResult[0].ToString());
+        var scanKeys = scanResult[1].ToStringArray().Select(k => (RedisKey)k).ToList();
+        keys.AddRange(scanKeys);
     }
+    while (cursor != 0);
+
+    return keys;
+}
+
 }
 
 
