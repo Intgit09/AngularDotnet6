@@ -1,0 +1,129 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using StackExchange.Redis;
+using System;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
+
+[Route("api/[controller]")]
+[ApiController]
+public class FileUploadController : ControllerBase
+{
+    private const string RedisKeyPrefix = "file:";
+    private readonly IConnectionMultiplexer _redisConnection;
+
+    public FileUploadController(IConnectionMultiplexer redisConnection)
+    {
+        _redisConnection = redisConnection;
+    }
+
+    [HttpPost("uploadchunk")]
+    public async Task<IActionResult> UploadChunk(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest("No file was uploaded.");
+        }
+
+        // Convert the file to Base64 string
+        var fileBase64 = await ConvertFileToBase64(file);
+
+        // Generate a unique key for the file
+        var fileId = Guid.NewGuid().ToString();
+
+        // Store the file chunk in Redis with the generated key
+        var redisKey = RedisKeyPrefix + fileId;
+        await _redisConnection.GetDatabase().StringSetAsync(redisKey, fileBase64);
+
+        // Perform further processing or save the file chunk as needed
+
+        return Ok(new { message = "Chunk uploaded successfully." });
+    }
+
+    private async Task<string> ConvertFileToBase64(IFormFile file)
+    {
+        using (var memoryStream = new MemoryStream())
+        {
+            await file.CopyToAsync(memoryStream);
+            var bytes = memoryStream.ToArray();
+            return Convert.ToBase64String(bytes);
+        }
+    }
+}
+
+
+
+import { Component } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+
+@Component({
+  selector: 'app-file-uploader-component',
+  templateUrl: './file-uploader-component.component.html',
+  styleUrls: ['./file-uploader-component.component.scss']
+})
+export class FileUploaderComponentComponent {
+  selectedFile: File | null = null;
+
+  constructor(private http: HttpClient) {}
+
+  handleFileChange(event: any): void {
+    this.selectedFile = event.target.files[0];
+  }
+
+  uploadChunks(): void {
+    if (!this.selectedFile) return;
+
+    const chunkSize = 1024 * 1024; // 1MB chunk size
+    const totalChunks = Math.ceil(this.selectedFile.size / chunkSize);
+    let chunkIndex = 0;
+
+    const uploadChunk = (start: number, end: number): void => {
+      const chunk = this.selectedFile?.slice(start, end);
+
+      // Convert chunk to Base64 string
+      const chunkBase64 = this.arrayBufferToBase64(chunk);
+
+      // Create headers with chunk information
+      const headers = new HttpHeaders({
+        'Content-Type': 'application/octet-stream',
+        'X-Chunk-Index': String(chunkIndex),
+        'X-Total-Chunks': String(totalChunks),
+      });
+
+      // Create form data and append the chunk and additional form fields
+      const formData = new FormData();
+      formData.append('file', chunkBase64);
+      formData.append('text', 'Sample Text'); // Replace 'text' with your desired form field name
+
+      // Send the chunk to the server
+      this.http
+        .post('http://localhost:5080/api/FileUpload/UploadChunk', formData, { headers })
+        .subscribe((response) => {
+          // Handle response from the server, e.g., success or error handling
+          console.log(response);
+          chunkIndex++;
+
+          // Upload next chunk if there are more chunks remaining
+          if (chunkIndex < totalChunks) {
+            uploadChunk(chunkIndex * chunkSize, (chunkIndex + 1) * chunkSize);
+          } else {
+            // All chunks uploaded
+            console.log('File upload complete.');
+          }
+        });
+    };
+
+    uploadChunk(0, chunkSize);
+  }
+
+  arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+}
