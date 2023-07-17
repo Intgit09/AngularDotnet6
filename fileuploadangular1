@@ -87,3 +87,26 @@ export class FileUploaderComponentComponent {
     return parts[parts.length - 1];
   }
 }
+
+{
+  "Serilog": {
+    "Using": [ "Serilog.Sinks.Splunk" ],
+    "MinimumLevel": "Information",
+    "WriteTo": [
+      {
+        "Name": "Splunk",
+        "Args": {
+          "host": "your_splunk_host",
+          "port": 8088, // Change this to the appropriate Splunk port
+          "source": "your_source_name",
+          "index": "your_index_name",
+          "batchIntervalInSeconds": 2, // Change this to set the batch interval in seconds
+          "customFields": [
+            { "Name": "your_custom_field_name", "Value": "your_custom_field_value" }
+          ]
+        }
+      }
+    ]
+  }
+}
+
