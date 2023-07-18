@@ -110,3 +110,14 @@ export class FileUploaderComponentComponent {
   }
 }
 
+
+const totalSize = this.selectedFiles2.reduce((acc: number, file: File) => acc + file.size, 0);
+    const maxSize = 30 * 1024 * 1024; // 30 MB
+
+    if (totalSize > maxSize) {
+      // Handle validation error
+      console.log('Total size of all attachments exceeds the limit.');
+    }
+
+
+
