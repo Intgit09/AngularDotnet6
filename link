@@ -8,3 +8,25 @@ services.Configure<KestrelServerOptions>(options =>
             {
                 options.Limits.MaxRequestBodySize = null;
             });
+
+List<FileModel>
+The API endpoint performs validation to ensure the total size of all attachments does not exceed 35 MB. If the validation fails, the API will return an appropriate error message.
+
+POST /api/upload HTTP/1.1
+Content-Type: application/json
+
+{
+  "files": [
+    {
+      "FileName": "example-image.jpg",
+      "Content": "<binary-data>",
+      "FileType": "image/jpeg"
+    },
+    {
+      "FileName": "example-document.pdf",
+      "Content": "<binary-data>",
+      "FileType": "application/pdf"
+    }
+  ]
+}
+
