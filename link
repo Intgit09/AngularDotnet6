@@ -30,3 +30,28 @@ Content-Type: application/json
   ]
 }
 
+
+<nlog xmlns="http://www.nlog-project.org/schemas/NLog.xsd"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <targets>
+    <!-- Target 1 - Primary target -->
+    <target xsi:type="File" name="target1" fileName="logs/logfile.txt"
+            layout="${longdate} ${level:uppercase=true} ${message}" />
+
+    <!-- Target 2 - Fallback target -->
+    <target xsi:type="File" name="target2" fileName="logs/fallback_logfile.txt"
+            layout="${longdate} ${level:uppercase=true} ${message}" />
+  </targets>
+
+  <rules>
+    <!-- Rule for Target 1 (primary) -->
+    <logger name="*" minlevel="Trace" writeTo="target1" />
+
+    <!-- Rule for Target 2 (fallback) -->
+    <logger name="*" minlevel="Trace" writeTo="target2" />
+  </rules>
+
+</nlog>
+
+
