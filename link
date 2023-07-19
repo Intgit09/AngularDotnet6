@@ -82,5 +82,42 @@ public class Program
         Log.CloseAndFlush();
     }
 }
+{
+  "Serilog": {
+    "Using": ["Serilog.Sinks.Splunk", "Serilog.Sinks.File"],
+    "MinimumLevel": "Verbose",
+    "WriteTo": [
+      {
+        "Name": "Logger",
+        "Args": {
+          "configureLogger": {
+            "WriteTo": [
+              {
+                "Name": "Splunk",
+                "Args": {
+                  "host": "your_splunk_host",
+                  "port": 8088,
+                  "source": "your_source_name",
+                  "index": "your_index_name",
+                  "customFields": [
+                    { "Name": "your_custom_field_name", "Value": "your_custom_field_value" }
+                  ]
+                }
+              },
+              {
+                "Name": "File",
+                "Args": {
+                  "path": "logs/logfile.txt",
+                  "rollingInterval": "Day"
+                }
+              }
+            ]
+          },
+          "restrictedToMinimumLevel": "Information"
+        }
+      }
+    ]
+  }
+}
 
 
