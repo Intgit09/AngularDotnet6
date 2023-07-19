@@ -53,5 +53,34 @@ Content-Type: application/json
   </rules>
 
 </nlog>
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.Splunk;
+using Serilog.Sinks.File;
+
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.Logger(lc =>
+                lc.Filter.ByIncludingOnly(evt => evt.Level >= LogEventLevel.Information)
+                    .WriteTo.Splunk(
+                        host: "your_splunk_host",
+                        port: 8088,
+                        source: "your_source_name",
+                        index: "your_index_name",
+                        customFields: new[] { new Field("your_custom_field_name", "your_custom_field_value") }))
+            .WriteTo.File("logs/logfile.txt", rollingInterval: RollingInterval.Day)
+            .CreateLogger();
+
+        // Sample log statements
+        Log.Information("This is an informational message.");
+        Log.Error("An error occurred.");
+
+        Log.CloseAndFlush();
+    }
+}
 
 
