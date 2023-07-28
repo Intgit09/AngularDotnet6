@@ -121,3 +121,47 @@ public class Program
 }
 
 
+using NLog;
+
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        // Set the NLog variables
+        GlobalDiagnosticsContext.Set("variable1", "value1");
+        GlobalDiagnosticsContext.Set("variable2", "value2");
+        // ...
+
+        // Configure NLog and start logging
+        // ...
+    }
+}
+<nlog xmlns="http://www.nlog-project.org/schemas/NLog.xsd"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <!-- Other NLog configurations -->
+
+  <targets>
+    <target xsi:type="File" name="fileTarget" fileName="logfile.txt" layout="${longdate} ${message}" />
+  </targets>
+
+  <rules>
+    <!-- Example: Using 'variable1' in a filter -->
+    <logger name="*" minlevel="Trace" writeTo="fileTarget">
+      <filters>
+        <when condition="'${gdc:item=variable1}' == 'value1'" action="Log" />
+      </filters>
+    </logger>
+
+    <!-- Example: Using 'variable2' in a filter -->
+    <logger name="*" minlevel="Trace" writeTo="fileTarget">
+      <filters>
+        <when condition="'${gdc:item=variable2}' == 'value2'" action="Log" />
+      </filters>
+    </logger>
+  </rules>
+
+</nlog>
+
+
+
