@@ -1,57 +1,62 @@
 https://www.c-sharpcorner.com/article/upload-large-files-to-mvc-webapi-using-partitioning/
 
-services.Configure<IISServerOptions>(options =>
-            {
-                options.MaxRequestBodySize = null;
-            });
-services.Configure<KestrelServerOptions>(options =>
-            {
-                options.Limits.MaxRequestBodySize = null;
-            });
+Title: API Design Guidelines - Audit Log Attribute and Custom Data Provider
 
-List<FileModel>
-The API endpoint performs validation to ensure the total size of all attachments does not exceed 35 MB. If the validation fails, the API will return an appropriate error message.
+Summary: This document outlines the integration of the Audit.NET library into your ASP.NET Core API for comprehensive audit logging. It covers the usage of the AuditLogAttribute and creating a custom data provider for capturing audit information.
 
-POST /api/upload HTTP/1.1
-Content-Type: application/json
+Key Points:
 
+AuditLogAttribute: Learn how to annotate API endpoints with the AuditLogAttribute to automatically capture audit logs for incoming requests.
+
+Custom Data Provider: Understand how to create a custom data provider to store audit logs in a database or external storage.
+
+Code Snippets and Explanation:
+
+AuditLogAttribute Usage:
+csharp
+Copy code
+[ApiController]
+[Route("api/[controller]")]
+public class UsersController : ControllerBase
 {
-  "files": [
+    [HttpGet("{id}")]
+    [AuditLog(Operation = "GetUser", IncludeRequestBody = false)]
+    public async Task<IActionResult> GetUser(int id)
     {
-      "FileName": "example-image.jpg",
-      "Content": "<binary-data>",
-      "FileType": "image/jpeg"
-    },
-    {
-      "FileName": "example-document.pdf",
-      "Content": "<binary-data>",
-      "FileType": "application/pdf"
+        // Retrieve user logic
+        return Ok(user);
     }
-  ]
 }
+Explanation: In this example, the AuditLogAttribute is applied to an API endpoint (GetUser) to capture audit logs. The Operation parameter specifies the name of the operation, and IncludeRequestBody determines whether to include request body in the log.
 
+Custom Data Provider:
+csharp
+Copy code
+public class CustomDataProvider : AuditDataProvider
+{
+    public override object InsertEvent(AuditEvent auditEvent)
+    {
+        // Implement logic to store auditEvent in a custom storage (e.g., database)
+        return auditEvent.Id;
+    }
+}
+csharp
+Copy code
+public void ConfigureServices(IServiceCollection services)
+{
+    services.AddControllers();
 
-<nlog xmlns="http://www.nlog-project.org/schemas/NLog.xsd"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    // Configure Audit.NET to use the custom data provider
+    Audit.Core.Configuration.Setup()
+        .UseCustomProvider(new CustomDataProvider());
+}
+Explanation: The CustomDataProvider class inherits from AuditDataProvider and overrides the InsertEvent method to store audit events in a custom storage. In ConfigureServices, the custom data provider is configured in Audit.NET.
 
-  <targets>
-    <!-- Target 1 - Primary target -->
-    <target xsi:type="File" name="target1" fileName="logs/logfile.txt"
-            layout="${longdate} ${level:uppercase=true} ${message}" />
+By incorporating the AuditLogAttribute and a custom data provider, your API gains a powerful audit trail, allowing you to monitor and analyze interactions with your endpoints.
 
-    <!-- Target 2 - Fallback target -->
-    <target xsi:type="File" name="target2" fileName="logs/fallback_logfile.txt"
-            layout="${longdate} ${level:uppercase=true} ${message}" />
-  </targets>
+With this approach, your API design ensures comprehensive audit logging, promoting transparency, security, and accountability across your application's interactions.
 
-  <rules>
-    <!-- Rule for Target 1 (primary) -->
-    <logger name="*" minlevel="Trace" writeTo="target1" />
-
-    <!-- Rule for Target 2 (fallback) -->
-    <logger name="*" minlevel="Trace" writeTo="target2" />
-  </rules>
-
+Note: Be sure to install and reference the Audit.NET NuGet package (Audit.NET and Audit.NET.AspNetCore) in your project to utilize these features.
 </nlog>
 using Serilog;
 using Serilog.Events;
