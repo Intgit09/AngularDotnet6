@@ -165,3 +165,99 @@ public class Program
 
 
 
+
+
+**API Design Documentation:**
+
+Title: API Design Guidelines - Audit Log Attribute and Custom Data Provider for Microservices
+
+Summary: This document outlines the integration of the Audit.NET library into your ASP.NET Core microservices for comprehensive audit logging. It covers the usage of the `AuditLogAttribute` to annotate API endpoints and creating a custom data provider to store audit logs in a database.
+
+Key Points:
+- **AuditLogAttribute**: Learn how to annotate API endpoints across microservices with the `AuditLogAttribute` to automatically capture audit logs for incoming requests.
+
+- **Custom Data Provider**: Understand how to create a custom data provider using ADO.NET to store audit logs in a database, providing a central repository for audit information across microservices.
+
+Code Snippets and Explanation:
+
+1. **AuditLogAttribute Usage:**
+
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+public class UsersController : ControllerBase
+{
+    [HttpGet("{id}")]
+    [AuditLog(Operation = "GetUser", IncludeRequestBody = false)]
+    public async Task<IActionResult> GetUser(int id)
+    {
+        // Retrieve user logic
+        return Ok(user);
+    }
+}
+```
+
+Explanation: The `AuditLogAttribute` is applied to an API endpoint (`GetUser`) to capture audit logs. The `Operation` parameter specifies the name of the operation, and `IncludeRequestBody` determines whether to include request body in the log.
+
+2. **Custom Data Provider with ADO.NET:**
+
+```csharp
+public class CustomDataProvider : AuditDataProvider
+{
+    public override object InsertEvent(AuditEvent auditEvent)
+    {
+        using (var connection = new SqlConnection("YourConnectionString"))
+        {
+            connection.Open();
+            var cmd = connection.CreateCommand();
+            cmd.CommandText = "INSERT INTO AuditLog (EventDate, EventType, Username) VALUES (@EventDate, @EventType, @Username)";
+            cmd.Parameters.AddWithValue("@EventDate", auditEvent.StartDate);
+            cmd.Parameters.AddWithValue("@EventType", auditEvent.Environment.CallingMethodName);
+            cmd.Parameters.AddWithValue("@Username", auditEvent.Environment.UserName);
+            cmd.ExecuteNonQuery();
+        }
+        
+        return null; // No need to return an ID for this example
+    }
+}
+```
+
+```csharp
+public void ConfigureServices(IServiceCollection services)
+{
+    services.AddControllers();
+
+    // Configure Audit.NET to use the custom data provider
+    Audit.Core.Configuration.Setup()
+        .UseCustomProvider(new CustomDataProvider());
+}
+```
+
+Explanation: The `CustomDataProvider` class uses ADO.NET to insert audit events into a database. In the `ConfigureServices` method, the custom data provider is configured in Audit.NET.
+
+**Database Table Design:**
+
+```sql
+CREATE TABLE AuditLog (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    EventDate DATETIME NOT NULL,
+    EventType NVARCHAR(100) NOT NULL,
+    Username NVARCHAR(50) NOT NULL
+);
+```
+
+Explanation: The `AuditLog` table stores audit logs with columns for the event date, event type, and username.
+
+By incorporating the `AuditLogAttribute` and a custom data provider with ADO.NET, your microservices gain a powerful audit trail, ensuring accountability and traceability across their interactions.
+
+With this approach, your API design ensures comprehensive audit logging and centralized storage, promoting transparency and security across your microservices ecosystem.
+
+*Note: Be sure to install and reference the Audit.NET NuGet package (`Audit.NET`, `Audit.NET.AspNetCore`, and `System.Data.SqlClient`) in your project to utilize these features.*
+
+
+
+
+
+
+
+
