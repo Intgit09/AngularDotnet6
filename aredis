@@ -1,428 +1,60 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using StackExchange.Redis;
-using System;
-using System.IO;
-using System.Text;
-using System.Threading.Tasks;
-
-[Route("api/[controller]")]
-[ApiController]
-public class FileUploadController : ControllerBase
-{
-    private const string RedisKeyPrefix = "file:";
-    private readonly IConnectionMultiplexer _redisConnection;
-
-    public FileUploadController(IConnectionMultiplexer redisConnection)
-    {
-        _redisConnection = redisConnection;
-    }
-
-    [HttpPost("uploadchunk")]
-    public async Task<IActionResult> UploadChunk(IFormFile file)
-    {
-        if (file == null || file.Length == 0)
-        {
-            return BadRequest("No file was uploaded.");
-        }
-
-        // Convert the file to Base64 string
-        var fileBase64 = await ConvertFileToBase64(file);
-
-        // Generate a unique key for the file
-        var fileId = Guid.NewGuid().ToString();
-
-        // Store the file chunk in Redis with the generated key
-        var redisKey = RedisKeyPrefix + fileId;
-        await _redisConnection.GetDatabase().StringSetAsync(redisKey, fileBase64);
-
-        // Perform further processing or save the file chunk as needed
+Certainly, I can help you create a design documentation outline for the authentication process you described. Below is a high-level structure for the documentation:
 
-        return Ok(new { message = "Chunk uploaded successfully." });
-    }
+---
 
-    private async Task<string> ConvertFileToBase64(IFormFile file)
-    {
-        using (var memoryStream = new MemoryStream())
-        {
-            await file.CopyToAsync(memoryStream);
-            var bytes = memoryStream.ToArray();
-            return Convert.ToBase64String(bytes);
-        }
-    }
-}
+# Authentication System Design Documentation
 
+## 1. Introduction
 
+### 1.1 Purpose
+This document outlines the design and implementation of the authentication system, which involves the generation and validation of access tokens using Redis as a token store.
 
-import { Component } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+### 1.2 Scope
+The authentication system described here is responsible for handling user access tokens and their validation against a Redis server. It also covers the process of generating and storing IDC (Identity and Claims) tokens.
 
-@Component({
-  selector: 'app-file-uploader-component',
-  templateUrl: './file-uploader-component.component.html',
-  styleUrls: ['./file-uploader-component.component.scss']
-})
-export class FileUploaderComponentComponent {
-  selectedFile: File | null = null;
+## 2. Authentication Flow
 
-  constructor(private http: HttpClient) {}
+### 2.1 Access Token Generation
+1. When a user logs in or requests an access token, the system generates a unique access token.
+2. The access token includes user claims and a timestamp for expiration.
+3. This token is returned to the user.
 
-  handleFileChange(event: any): void {
-    this.selectedFile = event.target.files[0];
-  }
+### 2.2 Access Token Validation
+1. When a user makes an authorized API request, they must include the access token in the request header.
+2. The system checks if the access token exists in the Redis server.
+3. If the access token is not in Redis or has expired, the user is required to re-authenticate.
+4. If the access token is valid and present in Redis, the user is allowed access.
 
-  uploadChunks(): void {
-    if (!this.selectedFile) return;
+### 2.3 IDC Token Creation
+1. If the access token is not found in Redis or has expired, the user needs to authenticate.
+2. Upon successful authentication, the system generates a new IDC token containing user identity and claims.
+3. This IDC token is stored in Redis with an expiration time.
 
-    const chunkSize = 1024 * 1024; // 1MB chunk size
-    const totalChunks = Math.ceil(this.selectedFile.size / chunkSize);
-    let chunkIndex = 0;
+## 3. Redis Integration
 
-    const uploadChunk = (start: number, end: number): void => {
-      const chunk = this.selectedFile?.slice(start, end);
-
-      // Convert chunk to Base64 string
-      const chunkBase64 = this.arrayBufferToBase64(chunk);
-
-      // Create headers with chunk information
-      const headers = new HttpHeaders({
-        'Content-Type': 'application/octet-stream',
-        'X-Chunk-Index': String(chunkIndex),
-        'X-Total-Chunks': String(totalChunks),
-      });
-
-      // Create form data and append the chunk and additional form fields
-      const formData = new FormData();
-      formData.append('file', chunkBase64);
-      formData.append('text', 'Sample Text'); // Replace 'text' with your desired form field name
-
-      // Send the chunk to the server
-      this.http
-        .post('http://localhost:5080/api/FileUpload/UploadChunk', formData, { headers })
-        .subscribe((response) => {
-          // Handle response from the server, e.g., success or error handling
-          console.log(response);
-          chunkIndex++;
+### 3.1 Token Storage in Redis
+1. Access tokens are stored in Redis with a time-to-live (TTL) set to their expiration time.
+2. IDC tokens are also stored in Redis with a TTL.
 
-          // Upload next chunk if there are more chunks remaining
-          if (chunkIndex < totalChunks) {
-            uploadChunk(chunkIndex * chunkSize, (chunkIndex + 1) * chunkSize);
-          } else {
-            // All chunks uploaded
-            console.log('File upload complete.');
-          }
-        });
-    };
-
-    uploadChunk(0, chunkSize);
-  }
-
-  arrayBufferToBase64(buffer: ArrayBuffer): string {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-  }
-}
-
-
-
+## 4. Error Handling
 
+### 4.1 Unauthorized Access
+1. If a user provides an invalid or expired access token, the system responds with a 401 Unauthorized status code.
+2. The user is prompted to re-authenticate.
 
+## 5. Security Considerations
 
+### 5.1 Token Security
+1. Access tokens should be generated with strong cryptography.
+2. Token transmission should be secure (e.g., over HTTPS).
 
+### 5.2 Redis Security
+1. Redis should be properly secured to prevent unauthorized access.
 
+## 6. Conclusion
 
+This documentation outlines the design and functionality of the authentication system, including access token generation, validation, and IDC token creation using Redis as a token store.
 
+---
 
-
-
-
-
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using StackExchange.Redis;
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-
-[Route("api/[controller]")]
-[ApiController]
-public class FileUploadController : ControllerBase
-{
-    private const string UploadsDirectory = "Uploads";
-    private readonly IConnectionMultiplexer _redisConnection;
-
-    public FileUploadController(IConnectionMultiplexer redisConnection)
-    {
-        _redisConnection = redisConnection;
-    }
-
-    [HttpPost("upload/{fileName}/{fileExt}")]
-    public async Task<IActionResult> UploadChunk(string fileName, string fileExt)
-    {
-        // Get chunk information from request headers
-        var chunkIndex = Request.Headers["X-Chunk-Index"];
-        var totalChunks = Request.Headers["X-Total-Chunks"];
-
-        // Check if all chunks have been received
-        if (string.IsNullOrEmpty(chunkIndex) || string.IsNullOrEmpty(totalChunks))
-        {
-            return BadRequest(new { error = "Invalid chunk information" });
-        }
-
-        // Retrieve the uploaded chunk from the request body
-        using (var memoryStream = new MemoryStream())
-        {
-            await Request.Body.CopyToAsync(memoryStream);
-            var chunkBytes = memoryStream.ToArray();
-
-            // Save the chunk to Redis cache with Base64 encoding
-            var redisDb = _redisConnection.GetDatabase();
-            var redisKey = $"{fileName}-{chunkIndex}-{totalChunks}";
-            var redisValue = Convert.ToBase64String(chunkBytes);
-            redisDb.StringSet(redisKey, redisValue);
-        }
-
-        // Check if all chunks have been received
-        var currentChunkIndex = int.Parse(chunkIndex);
-        var totalChunkCount = int.Parse(totalChunks);
-        if (currentChunkIndex == totalChunkCount - 1)
-        {
-            // All chunks have been uploaded, combine the chunks into a single file
-            var mergedFileName = $"{fileName}.{fileExt}"; // Customize the file extension
-            var mergedFilePath = Path.Combine(UploadsDirectory, mergedFileName); // Customize the path as per your requirements
-
-            // Get all the chunk keys from Redis cache
-            var redisDb = _redisConnection.GetDatabase();
-            var redisKeys = redisDb.Execute("KEYS", $"{fileName}-*");
-
-            // Sort the chunk keys based on their names
-            var sortedChunkKeys = redisKeys.OrderBy(k => k.ToString());
-
-            // Combine the chunk data into a single file
-            using (var mergedFileStream = new FileStream(mergedFilePath, FileMode.Create))
-            {
-                foreach (var redisKey in sortedChunkKeys)
-                {
-                    var redisValue = redisDb.StringGet(redisKey);
-                    var chunkBytes = Convert.FromBase64String(redisValue);
-                    await mergedFileStream.WriteAsync(chunkBytes);
-                }
-            }
-
-            // Delete the chunk keys from Redis cache
-            foreach (var redisKey in sortedChunkKeys)
-            {
-                redisDb.KeyDelete(redisKey);
-            }
-
-            // Perform further processing or save the merged file as needed
-
-            return Ok(new { message = "File upload complete" });
-        }
-
-        return Ok(new { message = "Chunk uploaded successfully" });
-    }
-}
-
-
-
-
-<div>
-  <label for="fileInput">File:</label>
-  <input type="file" id="fileInput" (change)="handleFileChange($event)">
-</div>
-<div>
-  <label for="nameInput">Name:</label>
-  <input type="text" id="nameInput" [(ngModel)]="name">
-</div>
-<div>
-  <label for="emailInput">Email:</label>
-  <input type="email" id="emailInput" [(ngModel)]="email">
-</div>
-<div>
-  <label for="descriptionInput">Description:</label>
-  <textarea id="descriptionInput" [(ngModel)]="description"></textarea>
-</div>
-<button (click)="uploadChunks()">Upload</button>
-
-
-import { Component } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-
-@Component({
-  selector: 'app-file-uploader-component',
-  templateUrl: './file-uploader-component.component.html',
-  styleUrls: ['./file-uploader-component.component.scss']
-})
-export class FileUploaderComponentComponent {
-  selectedFile: File | null = null;
-  name: string = '';
-  email: string = '';
-  description: string = '';
-
-  constructor(private http: HttpClient) {}
-
-  handleFileChange(event: any): void {
-    this.selectedFile = event.target.files[0];
-  }
-
-  uploadChunks(): void {
-    if (!this.selectedFile) return;
-
-    // Create a FormData object to include the file and other fields
-    const formData = new FormData();
-    formData.append('file', this.selectedFile);
-    formData.append('name', this.name);
-    formData.append('email', this.email);
-    formData.append('description', this.description);
-
-    // Send the FormData to the server
-    this.http
-      .post('http://localhost:5080/api/FileUpload/UploadChunk', formData)
-      .subscribe(
-        (response) => {
-          console.log(response);
-          // Handle response from the server
-        },
-        (error) => {
-          console.error(error);
-          // Handle error response from the server
-        }
-      );
-  }
-}
-
-
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using StackExchange.Redis;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-
-[Route("api/[controller]")]
-[ApiController]
-public class FileUploadController : ControllerBase
-{
-    private const string UploadsDirectory = "Uploads";
-    private readonly IConnectionMultiplexer _redisConnection;
-
-    public FileUploadController(IConnectionMultiplexer redisConnection)
-    {
-        _redisConnection = redisConnection;
-    }
-
-    [HttpPost("upload/{fileName}/{fileExt}")]
-    public async Task<IActionResult> UploadChunk(string fileName, string fileExt)
-    {
-        // Get chunk information from request headers
-        var chunkIndex = Request.Headers["X-Chunk-Index"];
-        var totalChunks = Request.Headers["X-Total-Chunks"];
-
-        // Check if all chunks have been received
-        if (string.IsNullOrEmpty(chunkIndex) || string.IsNullOrEmpty(totalChunks))
-        {
-            return BadRequest(new { error = "Invalid chunk information" });
-        }
-
-        // Retrieve the uploaded chunk from the request body
-        using (var memoryStream = new MemoryStream())
-        {
-            await Request.Body.CopyToAsync(memoryStream);
-            var chunkBytes = memoryStream.ToArray();
-
-            // Save the chunk to Redis cache with Base64 encoding
-            var redisDb = _redisConnection.GetDatabase();
-            var redisKey = $"{fileName}-{chunkIndex}-{totalChunks}";
-            var redisValue = Convert.ToBase64String(chunkBytes);
-            redisDb.StringSet(redisKey, redisValue);
-        }
-
-        // Check if all chunks have been received
-        var currentChunkIndex = int.Parse(chunkIndex);
-        var totalChunkCount = int.Parse(totalChunks);
-        if (currentChunkIndex == totalChunkCount - 1)
-        {
-            // All chunks have been uploaded, combine the chunks into a single file
-            var mergedFileName = $"{fileName}.{fileExt}"; // Customize the file extension
-            var mergedFilePath = Path.Combine(UploadsDirectory, mergedFileName); // Customize the path as per your requirements
-
-            // Get all the chunk keys from Redis cache
-            var redisDb = _redisConnection.GetDatabase();
-            var pattern = $"{fileName}-*";
-            var sortedChunkKeys = ScanRedisKeys(redisDb, pattern).OrderBy(k => k.ToString());
-
-            // Combine the chunk data into a single file
-            using (var mergedFileStream = new FileStream(mergedFilePath, FileMode.Create))
-            {
-                foreach (var redisKey in sortedChunkKeys)
-                {
-                    var redisValue = redisDb.StringGet(redisKey);
-                    var chunkBytes = Convert.FromBase64String(redisValue);
-                    await mergedFileStream.WriteAsync(chunkBytes);
-                }
-            }
-
-            // Delete the chunk keys from Redis cache
-            foreach (var redisKey in sortedChunkKeys)
-            {
-                redisDb.KeyDelete(redisKey);
-            }
-
-            // Perform further processing or save the merged file as needed
-
-            return Ok(new { message = "File upload complete" });
-        }
-
-        return Ok(new { message = "Chunk uploaded successfully" });
-    }
-
-    private List<RedisKey> ScanRedisKeys(IDatabase redisDb, string pattern, int pageSize = 100)
-{
-    var keys = new List<RedisKey>();
-    long cursor = 0;
-    do
-    {
-        var scanResult = (RedisResult[])redisDb.Execute("SCAN", cursor.ToString(), "MATCH", pattern, "COUNT", pageSize.ToString());
-        cursor = long.Parse(scanResult[0].ToString());
-        var scanKeys = scanResult[1].ToStringArray().Select(k => (RedisKey)k).ToList();
-        keys.AddRange(scanKeys);
-    }
-    while (cursor != 0);
-
-    return keys;
-}
-
-}
-
-private List<RedisKey> ScanRedisKeys(IDatabase redisDb, string pattern, int pageSize = 100)
-{
-    var keys = new List<RedisKey>();
-    long cursor = 0;
-    do
-    {
-        var scanResult = (RedisResult[])redisDb.Execute("SCAN", cursor.ToString(), "MATCH", pattern, "COUNT", pageSize.ToString());
-        cursor = long.Parse(scanResult[0].ToString());
-
-        foreach (var keyResult in (RedisKey[])scanResult[1])
-        {
-            keys.Add(keyResult);
-        }
-    }
-    while (cursor != 0);
-
-    return keys;
-}
-
-
-
-
-
+Please fill in the specific details of your implementation, such as token generation algorithms, Redis setup, and any additional security measures. Additionally, consider including diagrams or code snippets as needed to provide a comprehensive understanding of the authentication system.
