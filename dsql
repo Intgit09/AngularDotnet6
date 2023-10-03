@@ -1,0 +1,34 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Dynamic.Core;
+
+public static class DynamicLinqExtensions
+{
+    public static IQueryable<T> WhereAndSort<T>(
+        this IQueryable<T> source,
+        string filterExpression,
+        string orderByExpression,
+        params object[] filterParameters)
+    {
+        if (!string.IsNullOrEmpty(filterExpression))
+        {
+            source = source.Where(filterExpression, filterParameters);
+        }
+
+        if (!string.IsNullOrEmpty(orderByExpression))
+        {
+            source = source.OrderBy(orderByExpression);
+        }
+
+        return source;
+    }
+
+    public static IQueryable<T> Page<T>(
+        this IQueryable<T> source,
+        int pageNumber,
+        int pageSize)
+    {
+        return source.Skip((pageNumber - 1) * pageSize).Take(pageSize);
+    }
+}
