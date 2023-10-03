@@ -1,0 +1,30 @@
+class Program
+{
+    static void Main()
+    {
+        // Sample data source
+        var data = new List<Person>
+        {
+            new Person { Id = 1, Name = "Alice", Age = 30 },
+            new Person { Id = 2, Name = "Bob", Age = 25 },
+            new Person { Id = 3, Name = "Charlie", Age = 35 },
+            // Add more data as needed
+        }.AsQueryable();
+
+        // Dynamic filtering, sorting, and pagination
+        string filterExpression = "Age > @0 && Name.Contains(@1)";
+        object[] filterParameters = { 25, "a" };
+        string orderByExpression = "Age descending";
+        int pageNumber = 2;
+        int pageSize = 1;
+
+        var filteredAndSortedData = data
+            .WhereAndSort(filterExpression, orderByExpression, filterParameters)
+            .Page(pageNumber, pageSize);
+
+        foreach (var person in filteredAndSortedData)
+        {
+            Console.WriteLine($"Id: {person.Id}, Name: {person.Name}, Age: {person.Age}");
+        }
+    }
+}
