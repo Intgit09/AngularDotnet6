@@ -1,175 +1,9 @@
-cusing Microsoft.AspNetCore.Mvc;
-using Serilog;
-using System;
-
-[ApiController]
-[Route("api/[controller]")]
-public class YourController : ControllerBase
-{
-    private readonly ILogger _logger;
-
-    public YourController(ILogger<YourController> logger)
-    {
-        _logger = logger;
-    }
-
-    [HttpPost]
-    public IActionResult Post([FromBody] YourRequestModel request)
-    {
-        try
-        {
-            // Your business logic here
-
-            // Log sanitized payload
-            Log.Information("Received request: {@SanitizedRequest}", SanitizeRequest(request));
-
-            // Return success or appropriate response
-            return Ok("Request processed successfully");
-        }
-        catch (Exception ex)
-        {
-            // Log sanitized payload on error
-            LogErrorWithSanitizedRequest(ex, request);
-
-            // Return error response
-            return StatusCode(500, "Internal Server Error");
-        }
-    }
-
-    // Helper method to log error with sanitized request payload
-    private void LogErrorWithSanitizedRequest(Exception exception, YourRequestModel request)
-    {
-        try
-        {
-            // Log sanitized payload along with the exception
-            Log.Error(exception, "Error processing request: {@SanitizedRequest}", SanitizeRequest(request));
-        }
-        catch (Exception ex)
-        {
-            // Log any error that occurs during logging
-            Log.Fatal(ex, "Error logging request and exception");
-        }
-    }
-
-    // Helper method to sanitize request payload
-    private object SanitizeRequest(YourRequestModel request)
-    {
-        try
-        {
-            // Create a copy of the request to avoid modifying the original object
-            var sanitizedRequest = new YourRequestModel
-            {
-                Property1 = request.Property1,
-                Property2 = "REDACTED",
-                // Add more properties as needed
-            };
-
-            // Check if the request has an SSN property
-            if (!string.IsNullOrEmpty(request.SSN))
-            {
-                // Redact or modify SSN if present
-                sanitizedRequest.SSN = "REDACTED";
-            }
-
-            return sanitizedRequest;
-        }
-        catch (Exception ex)
-        {
-            // Log any error that occurs during sanitization
-            Log.Error(ex, "Error sanitizing request payload");
-            return "Error sanitizing request payload";
-        }
-    }
-}
-
-public class YourRequestModel
-{
-    // Your request model properties
-    public string Property1 { get; set; }
-    public string Property2 { get; set; }
-    public string SSN { get; set; }
-}
-
-
-using Microsoft.AspNetCore.Mvc;
-using Serilog;
-using System;
-
-[ApiController]
-[Route("api/[controller]")]
-public class YourController : ControllerBase
-{
-    private readonly ILogger _logger;
-
-    public YourController(ILogger<YourController> logger)
-    {
-        _logger = logger;
-    }
-
-    [HttpPost]
-    public IActionResult Post([FromBody] YourRequestModel request)
-    {
-        try
-        {
-            // Your business logic here
-
-            // Log sanitized payload
-            Log.Information("Received request: {@SanitizedRequest}", SanitizeRequest(request));
-
-            // Return success or appropriate response
-            return Ok("Request processed successfully");
-        }
-        catch (Exception ex)
-        {
-            // Log sanitized payload on error
-            LogErrorWithSanitizedRequest(ex, request);
-
-            // Return error response
-            return StatusCode(500, "Internal Server Error");
-        }
-    }
-
-    // Helper method to log error with sanitized request payload
-    private void LogErrorWithSanitizedRequest(Exception exception, YourRequestModel request)
-    {
-        try
-        {
-            // Log sanitized payload along with the exception
-            Log.Error(exception, "Error processing request: {@SanitizedRequest}", SanitizeRequest(request));
-        }
-        catch (Exception ex)
-        {
-            // Log any error that occurs during logging
-            Log.Fatal(ex, "Error logging request and exception");
-        }
-    }
-
-    // Helper method to sanitize request payload
-    private object SanitizeRequest(YourRequestModel request)
-    {
-        // Customize this method to redact or modify sensitive data as needed
-        // For example, you might set sensitive fields to a placeholder value
-        return new
-        {
-            Property1 = request.Property1,
-            Property2 = "REDACTED",
-            // Add more properties as needed
-        };
-    }
-}
-
-public class YourRequestModel
-
-
-
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
-using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 public class RequestLoggingMiddleware
@@ -187,9 +21,10 @@ public class RequestLoggingMiddleware
     {
         context.Request.EnableBuffering();
 
-        // Read the request payload
-        using (var reader = new StreamReader(context.Request.Body, Encoding.UTF8, true, 1024, true))
+        try
         {
+            // Read the request payload
+            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8, true, 1024, true);
             var requestBody = await reader.ReadToEndAsync();
 
             // Log sanitized payload
@@ -197,6 +32,10 @@ public class RequestLoggingMiddleware
 
             // Rewind the stream so the request can be processed downstream
             context.Request.Body.Seek(0, SeekOrigin.Begin);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading and logging request payload");
         }
 
         await _next(context);
@@ -207,20 +46,21 @@ public class RequestLoggingMiddleware
         try
         {
             // Parse the JSON request body
-            var json = JsonConvert.DeserializeObject<JObject>(requestBody);
+            var jsonDocument = JsonDocument.Parse(requestBody);
 
             // Customize this logic to redact or modify sensitive data as needed
             // For example, you might set sensitive fields to a placeholder value
             // This example redacts all properties at the first level
-            foreach (var property in json.Properties())
+            var sanitizedJson = new JsonObject();
+            foreach (var property in jsonDocument.RootElement.EnumerateObject())
             {
-                if (property.Value.Type == JTokenType.String)
+                if (property.Value.ValueKind == JsonValueKind.String)
                 {
-                    property.Value = "REDACTED";
+                    sanitizedJson.Add(property.Name, "REDACTED");
                 }
             }
 
-            return json;
+            return sanitizedJson;
         }
         catch (Exception ex)
         {
@@ -236,8 +76,4 @@ public static class RequestLoggingMiddlewareExtensions
     {
         return builder.UseMiddleware<RequestLoggingMiddleware>();
     }
-}
-
-{
-    // Your request model properties
 }
