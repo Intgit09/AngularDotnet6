@@ -1,30 +1,164 @@
-class Program
+cusing Microsoft.AspNetCore.Mvc;
+using Serilog;
+using System;
+
+[ApiController]
+[Route("api/[controller]")]
+public class YourController : ControllerBase
 {
-    static void Main()
+    private readonly ILogger _logger;
+
+    public YourController(ILogger<YourController> logger)
     {
-        // Sample data source
-        var data = new List<Person>
+        _logger = logger;
+    }
+
+    [HttpPost]
+    public IActionResult Post([FromBody] YourRequestModel request)
+    {
+        try
         {
-            new Person { Id = 1, Name = "Alice", Age = 30 },
-            new Person { Id = 2, Name = "Bob", Age = 25 },
-            new Person { Id = 3, Name = "Charlie", Age = 35 },
-            // Add more data as needed
-        }.AsQueryable();
+            // Your business logic here
 
-        // Dynamic filtering, sorting, and pagination
-        string filterExpression = "Age > @0 && Name.Contains(@1)";
-        object[] filterParameters = { 25, "a" };
-        string orderByExpression = "Age descending";
-        int pageNumber = 2;
-        int pageSize = 1;
+            // Log sanitized payload
+            Log.Information("Received request: {@SanitizedRequest}", SanitizeRequest(request));
 
-        var filteredAndSortedData = data
-            .WhereAndSort(filterExpression, orderByExpression, filterParameters)
-            .Page(pageNumber, pageSize);
-
-        foreach (var person in filteredAndSortedData)
+            // Return success or appropriate response
+            return Ok("Request processed successfully");
+        }
+        catch (Exception ex)
         {
-            Console.WriteLine($"Id: {person.Id}, Name: {person.Name}, Age: {person.Age}");
+            // Log sanitized payload on error
+            LogErrorWithSanitizedRequest(ex, request);
+
+            // Return error response
+            return StatusCode(500, "Internal Server Error");
         }
     }
+
+    // Helper method to log error with sanitized request payload
+    private void LogErrorWithSanitizedRequest(Exception exception, YourRequestModel request)
+    {
+        try
+        {
+            // Log sanitized payload along with the exception
+            Log.Error(exception, "Error processing request: {@SanitizedRequest}", SanitizeRequest(request));
+        }
+        catch (Exception ex)
+        {
+            // Log any error that occurs during logging
+            Log.Fatal(ex, "Error logging request and exception");
+        }
+    }
+
+    // Helper method to sanitize request payload
+    private object SanitizeRequest(YourRequestModel request)
+    {
+        try
+        {
+            // Create a copy of the request to avoid modifying the original object
+            var sanitizedRequest = new YourRequestModel
+            {
+                Property1 = request.Property1,
+                Property2 = "REDACTED",
+                // Add more properties as needed
+            };
+
+            // Check if the request has an SSN property
+            if (!string.IsNullOrEmpty(request.SSN))
+            {
+                // Redact or modify SSN if present
+                sanitizedRequest.SSN = "REDACTED";
+            }
+
+            return sanitizedRequest;
+        }
+        catch (Exception ex)
+        {
+            // Log any error that occurs during sanitization
+            Log.Error(ex, "Error sanitizing request payload");
+            return "Error sanitizing request payload";
+        }
+    }
+}
+
+public class YourRequestModel
+{
+    // Your request model properties
+    public string Property1 { get; set; }
+    public string Property2 { get; set; }
+    public string SSN { get; set; }
+}
+
+
+using Microsoft.AspNetCore.Mvc;
+using Serilog;
+using System;
+
+[ApiController]
+[Route("api/[controller]")]
+public class YourController : ControllerBase
+{
+    private readonly ILogger _logger;
+
+    public YourController(ILogger<YourController> logger)
+    {
+        _logger = logger;
+    }
+
+    [HttpPost]
+    public IActionResult Post([FromBody] YourRequestModel request)
+    {
+        try
+        {
+            // Your business logic here
+
+            // Log sanitized payload
+            Log.Information("Received request: {@SanitizedRequest}", SanitizeRequest(request));
+
+            // Return success or appropriate response
+            return Ok("Request processed successfully");
+        }
+        catch (Exception ex)
+        {
+            // Log sanitized payload on error
+            LogErrorWithSanitizedRequest(ex, request);
+
+            // Return error response
+            return StatusCode(500, "Internal Server Error");
+        }
+    }
+
+    // Helper method to log error with sanitized request payload
+    private void LogErrorWithSanitizedRequest(Exception exception, YourRequestModel request)
+    {
+        try
+        {
+            // Log sanitized payload along with the exception
+            Log.Error(exception, "Error processing request: {@SanitizedRequest}", SanitizeRequest(request));
+        }
+        catch (Exception ex)
+        {
+            // Log any error that occurs during logging
+            Log.Fatal(ex, "Error logging request and exception");
+        }
+    }
+
+    // Helper method to sanitize request payload
+    private object SanitizeRequest(YourRequestModel request)
+    {
+        // Customize this method to redact or modify sensitive data as needed
+        // For example, you might set sensitive fields to a placeholder value
+        return new
+        {
+            Property1 = request.Property1,
+            Property2 = "REDACTED",
+            // Add more properties as needed
+        };
+    }
+}
+
+public class YourRequestModel
+{
+    // Your request model properties
 }
