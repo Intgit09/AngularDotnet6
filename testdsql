@@ -159,6 +159,85 @@ public class YourController : ControllerBase
 }
 
 public class YourRequestModel
+
+
+
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
+
+public class RequestLoggingMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<RequestLoggingMiddleware> _logger;
+
+    public RequestLoggingMiddleware(RequestDelegate next, ILogger<RequestLoggingMiddleware> logger)
+    {
+        _next = next ?? throw new ArgumentNullException(nameof(next));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public async Task InvokeAsync(HttpContext context)
+    {
+        context.Request.EnableBuffering();
+
+        // Read the request payload
+        using (var reader = new StreamReader(context.Request.Body, Encoding.UTF8, true, 1024, true))
+        {
+            var requestBody = await reader.ReadToEndAsync();
+
+            // Log sanitized payload
+            Log.Information("Received request: {@SanitizedRequest}", SanitizeRequest(requestBody));
+
+            // Rewind the stream so the request can be processed downstream
+            context.Request.Body.Seek(0, SeekOrigin.Begin);
+        }
+
+        await _next(context);
+    }
+
+    private object SanitizeRequest(string requestBody)
+    {
+        try
+        {
+            // Parse the JSON request body
+            var json = JsonConvert.DeserializeObject<JObject>(requestBody);
+
+            // Customize this logic to redact or modify sensitive data as needed
+            // For example, you might set sensitive fields to a placeholder value
+            // This example redacts all properties at the first level
+            foreach (var property in json.Properties())
+            {
+                if (property.Value.Type == JTokenType.String)
+                {
+                    property.Value = "REDACTED";
+                }
+            }
+
+            return json;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sanitizing request payload");
+            return "Error sanitizing request payload";
+        }
+    }
+}
+
+public static class RequestLoggingMiddlewareExtensions
+{
+    public static IApplicationBuilder UseRequestLogging(this IApplicationBuilder builder)
+    {
+        return builder.UseMiddleware<RequestLoggingMiddleware>();
+    }
+}
+
 {
     // Your request model properties
 }
