@@ -1,79 +1,49 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using System;
-using System.IO;
-using System.Text.Json;
-using System.Threading.Tasks;
+Title: Migration Analysis and Decision Document for In M Project
 
-public class RequestLoggingMiddleware
-{
-    private readonly RequestDelegate _next;
-    private readonly ILogger<RequestLoggingMiddleware> _logger;
+**1. Introduction:**
 
-    public RequestLoggingMiddleware(RequestDelegate next, ILogger<RequestLoggingMiddleware> logger)
-    {
-        _next = next ?? throw new ArgumentNullException(nameof(next));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
+The purpose of this document is to analyze and make an informed decision regarding the migration of the I m  project. The project involves creating maps with different columns and transformation functions, utilizing these maps in Active Batch for data transformation from source to destination.
 
-    public async Task InvokeAsync(HttpContext context)
-    {
-        context.Request.EnableBuffering();
+**2. Current State:**
 
-        try
-        {
-            // Read the request payload
-            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8, true, 1024, true);
-            var requestBody = await reader.ReadToEndAsync();
+- The existing solution is a Visual C# application that is not fully operational but can be fine-tuned by developers.
+- Few business users interact with the application, and usage is not very frequent.
+- Users typically modify mappings after creating them.
 
-            // Log sanitized payload
-            Log.Information("Received request: {@SanitizedRequest}", SanitizeRequest(requestBody));
+**3. Analysis of Web Application (Angular and .NET API):**
 
-            // Rewind the stream so the request can be processed downstream
-            context.Request.Body.Seek(0, SeekOrigin.Begin);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error reading and logging request payload");
-        }
+- Web application technologies like Angular and .NET API are generally suitable for broader usage and scalability.
+- However, for this project, the limited user base and infrequent use suggest that the overhead of transitioning to a web-based solution may not be justified.
+- The primary use case involves mapping modification rather than extensive interaction with a web interface.
 
-        await _next(context);
-    }
+**4. Reasons for Staying with Existing Visual C# Application:**
 
-    private object SanitizeRequest(string requestBody)
-    {
-        try
-        {
-            // Parse the JSON request body
-            var jsonDocument = JsonDocument.Parse(requestBody);
+- Developer Familiarity: The existing application is in Visual C#, and developers are likely familiar with the codebase, facilitating faster modifications and improvements.
+  
+- Quick Functional Deployment: Enhancing the existing Visual C# application might provide a quicker path to making it fully functional for business use, compared to a full rewrite in Angular and Web API.
 
-            // Customize this logic to redact or modify sensitive data as needed
-            // For example, you might set sensitive fields to a placeholder value
-            // This example redacts all properties at the first level
-            var sanitizedJson = new JsonObject();
-            foreach (var property in jsonDocument.RootElement.EnumerateObject())
-            {
-                if (property.Value.ValueKind == JsonValueKind.String)
-                {
-                    sanitizedJson.Add(property.Name, "REDACTED");
-                }
-            }
+- Targeted User Base: Since only a few business users are involved and their interactions are limited, a desktop application may better suit their needs without the need for a web-based interface.
 
-            return sanitizedJson;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error sanitizing request payload");
-            return "Error sanitizing request payload";
-        }
-    }
-}
+**5. Considerations:**
 
-public static class RequestLoggingMiddlewareExtensions
-{
-    public static IApplicationBuilder UseRequestLogging(this IApplicationBuilder builder)
-    {
-        return builder.UseMiddleware<RequestLoggingMiddleware>();
-    }
-}
+- Development Effort: Compare the effort required for enhancing the existing Visual C# application versus the effort needed for a full migration to a web-based solution.
+
+- Maintenance: Assess the long-term maintenance implications of both options, considering the skills available in the development team.
+
+**6. Decision:**
+
+Based on the analysis, it is recommended to proceed with enhancing the existing Visual C# application. The targeted user base, limited interactions, and the need for quick deployment align with the advantages offered by this approach.
+
+**7. Next Steps:**
+
+- Task Breakdown: Outline the specific tasks required to enhance the Visual C# application.
+  
+- Developer Collaboration: Encourage collaboration among developers to fine-tune the application and address any existing issues.
+
+- Testing and Deployment Plan: Establish a plan for testing the modified application thoroughly before deploying it for functional use.
+
+**8. Conclusion:**
+
+By choosing to enhance the existing Visual C# application, the project aims to deliver a functional solution quickly, considering the specific characteristics and needs of the user base. This decision aligns with efficiency and pragmatic considerations.
+
+*[Document Author]*
