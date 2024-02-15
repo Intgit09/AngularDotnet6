@@ -1,49 +1,35 @@
-Database Migration Document: Migrating Old Users and Adding New Roles
+@startuml
 
-This document outlines the migration process for migrating old users from the old system and adding four new roles ("editor," "moderator," "supplier," and "customer") to the existing users table in your target database.
+left to right direction
+skinparam packageStyle rectangle
 
-**Current Schema:**
-```
-Column Name   | Data Type        | Description
-user_id       | INT              | Primary Key
-username      | VARCHAR(255)     | Unique
-email         | VARCHAR(255)     | Unique
-password      | VARCHAR(255)     | Hashed Password
-...           | ...              | Other user details (name, address, etc.)
-```
+actor "Internal User" as InternalUser
+actor "External User" as ExternalUser
+actor "SSO Application" as SSOApplication
+actor "Bill Status Application Portal" as BillStatusApp
+actor "Claim Search" as ClaimSearch
+actor "Download Attachment" as DownloadAttachment
 
-**New Schema:**
-```
-Column Name   | Data Type                 | Description
-user_id       | INT                       | Primary Key
-username      | VARCHAR(255)              | Unique
-email         | VARCHAR(255)              | Unique
-password      | VARCHAR(255)              | Hashed Password
-role          | ENUM('user', 'editor', 'moderator', 'supplier', 'customer')  | User's Access Level
-...           | ...                       | Other user details (name, address, etc.)
-```
+rectangle "Use Case Diagram" {
+    rectangle "User Authentication" {
+        InternalUser -- (SSOApplication)
+        ExternalUser -- (SSOApplication)
+        (SSOApplication) -- (BillStatusApp) : Login
+    }
 
-**1. Migration Steps:**
-- **Generating Insert script:**
-  - Create a temporary table in the source database with the same schema as the target system's users table.
-  - Populate the temporary table with data from the old application, ensuring to match the current identity ID of the table.
-  - Generate an insert script that matches the target system's schema using the data from the temporary table.
-- **Add role column:** Add a new column named role to the users table. This column should be an ENUM data type with options like "user," "editor," "moderator," "supplier," and "customer."
-- **Set default role:** Set the default value for the role column to "user" for existing users. This ensures existing users maintain their current access level.
-- **Update existing data (optional):** Depending on your application logic, you might need to update the role value for specific users based on pre-defined criteria.
-- **Insert new user roles:** Insert new roles "supplier" and "customer" into the user role table.
+    rectangle "User Registration" {
+        (SSOApplication) -- (BillStatusApp) : Register
+        InternalUser -- (BillStatusApp) : Register (with user info)
+        ExternalUser -- (BillStatusApp) : Register (with user info and provider info)
+    }
 
-**2. Downtime and Rollback:**
-- Consider the downtime required for applying the migration script. Depending on your database size and infrastructure, it might take some time.
-- Prepare a rollback plan in case of any issues during or after the migration. This might involve reverting the changes made by the migration script.
+    rectangle "Bill Status Page" {
+        (BillStatusApp) -- (ClaimSearch) : Enter Search Criteria
+        (ClaimSearch) -- (ClaimSearch) : Click Search
+        (ClaimSearch) -- (DownloadAttachment) : Click Download
+        InternalUser -- (ClaimSearch) : Search by Bill ID (Pro_Internal)
+        ExternalUser -- (ClaimSearch) : Select Provider (Pro_External)
+    }
+}
 
-**3. Data Validation and Testing:**
-- After applying the migration, ensure data integrity by validating the role values in the users table.
-- Thoroughly test your application functionalities to confirm that user roles and permissions work as expected with the new roles.
-
-**4. Additional Considerations:**
-- Implement proper access control mechanisms based on user roles in your application logic.
-- Document the changes made to the user table and update any relevant documentation.
-- Communicate the changes to your users if their access levels might be affected.
-
-**Note:** The migration script should be executed with caution, and thorough testing should be conducted to ensure the integrity of the data and the proper functioning of the application after the migration.
+@enduml
