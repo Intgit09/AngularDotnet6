@@ -1,366 +1,73 @@
-https://www.c-sharpcorner.com/article/upload-large-files-to-mvc-webapi-using-partitioning/
+@startuml
 
-services.Configure<IISServerOptions>(options =>
-            {
-                options.MaxRequestBodySize = null;
-            });
-services.Configure<KestrelServerOptions>(options =>
-            {
-                options.Limits.MaxRequestBodySize = null;
-            });
+(*) --> "User Login"
+if "User is Unregistered" then
+  --> "Register User"
+  --> "User Login"
+else
+  if "User has Pro_Internal or Pro_External Role" then
+    --> "Redirect to Bill Status Page"
+    --> "Enter Claims Search Criteria"
+    --> "Click Search"
+    --> "Show Search Results in Grid Table"
+    --> "Download Attachment"
+  else
+    --> "Select Provider"
+    --> "Redirect to Bill Status Page"
+    --> "Enter Claims Search Criteria"
+    --> "Click Search"
+    --> "Show Search Results in Grid Table"
+    --> "Download Attachment"
+  endif
+endif
 
-List<FileModel>
-The API endpoint performs validation to ensure the total size of all attachments does not exceed 35 MB. If the validation fails, the API will return an appropriate error message.
+@enduml
 
-POST /api/upload HTTP/1.1
-Content-Type: application/json
 
-{
-  "files": [
-    {
-      "FileName": "example-image.jpg",
-      "Content": "<binary-data>",
-      "FileType": "image/jpeg"
-    },
-    {
-      "FileName": "example-document.pdf",
-      "Content": "<binary-data>",
-      "FileType": "application/pdf"
+
+Based on the scenario you provided, here is a use case diagram created using PlantUML language:
+
+plantuml
+Copy code
+@startuml
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Internal User" as InternalUser
+actor "External User" as ExternalUser
+actor "SSO Application" as SSOApplication
+actor "Bill Status Application Portal" as BillStatusApp
+actor "Claim Search" as ClaimSearch
+actor "Download Attachment" as DownloadAttachment
+
+rectangle "Use Case Diagram" {
+    rectangle "User Authentication" {
+        InternalUser -- (SSOApplication)
+        ExternalUser -- (SSOApplication)
+        (SSOApplication) -- (BillStatusApp) : Login
     }
-  ]
-}
 
+    rectangle "User Registration" {
+        (SSOApplication) -- (BillStatusApp) : Register
+        InternalUser -- (BillStatusApp) : Register (with user info)
+        ExternalUser -- (BillStatusApp) : Register (with user info and provider info)
+    }
 
-<nlog xmlns="http://www.nlog-project.org/schemas/NLog.xsd"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-
-  <targets>
-    <!-- Target 1 - Primary target -->
-    <target xsi:type="File" name="target1" fileName="logs/logfile.txt"
-            layout="${longdate} ${level:uppercase=true} ${message}" />
-
-    <!-- Target 2 - Fallback target -->
-    <target xsi:type="File" name="target2" fileName="logs/fallback_logfile.txt"
-            layout="${longdate} ${level:uppercase=true} ${message}" />
-  </targets>
-
-  <rules>
-    <!-- Rule for Target 1 (primary) -->
-    <logger name="*" minlevel="Trace" writeTo="target1" />
-
-    <!-- Rule for Target 2 (fallback) -->
-    <logger name="*" minlevel="Trace" writeTo="target2" />
-  </rules>
-
-</nlog>
-using Serilog;
-using Serilog.Events;
-using Serilog.Sinks.Splunk;
-using Serilog.Sinks.File;
-
-public class Program
-{
-    public static void Main(string[] args)
-    {
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Verbose()
-            .WriteTo.Logger(lc =>
-                lc.Filter.ByIncludingOnly(evt => evt.Level >= LogEventLevel.Information)
-                    .WriteTo.Splunk(
-                        host: "your_splunk_host",
-                        port: 8088,
-                        source: "your_source_name",
-                        index: "your_index_name",
-                        customFields: new[] { new Field("your_custom_field_name", "your_custom_field_value") }))
-            .WriteTo.File("logs/logfile.txt", rollingInterval: RollingInterval.Day)
-            .CreateLogger();
-
-        // Sample log statements
-        Log.Information("This is an informational message.");
-        Log.Error("An error occurred.");
-
-        Log.CloseAndFlush();
+    rectangle "Bill Status Page" {
+        (BillStatusApp) -- (ClaimSearch) : Enter Search Criteria
+        (ClaimSearch) -- (ClaimSearch) : Click Search
+        (ClaimSearch) -- (DownloadAttachment) : Click Download
+        InternalUser -- (ClaimSearch) : Search by Bill ID (Pro_Internal)
+        ExternalUser -- (ClaimSearch) : Select Provider (Pro_External)
     }
 }
-{
-  "Serilog": {
-    "Using": ["Serilog.Sinks.Splunk", "Serilog.Sinks.File"],
-    "MinimumLevel": "Verbose",
-    "WriteTo": [
-      {
-        "Name": "Logger",
-        "Args": {
-          "configureLogger": {
-            "WriteTo": [
-              {
-                "Name": "Splunk",
-                "Args": {
-                  "host": "your_splunk_host",
-                  "port": 8088,
-                  "source": "your_source_name",
-                  "index": "your_index_name",
-                  "customFields": [
-                    { "Name": "your_custom_field_name", "Value": "your_custom_field_value" }
-                  ]
-                }
-              },
-              {
-                "Name": "File",
-                "Args": {
-                  "path": "logs/logfile.txt",
-                  "rollingInterval": "Day"
-                }
-              }
-            ]
-          },
-          "restrictedToMinimumLevel": "Information"
-        }
-      }
-    ]
-  }
-}
 
+@enduml
 
-using NLog;
 
-public class Program
-{
-    public static void Main(string[] args)
-    {
-        // Set the NLog variables
-        GlobalDiagnosticsContext.Set("variable1", "value1");
-        GlobalDiagnosticsContext.Set("variable2", "value2");
-        // ...
+This diagram represents the use cases described in the scenario:
 
-        // Configure NLog and start logging
-        // ...
-    }
-}
-<nlog xmlns="http://www.nlog-project.org/schemas/NLog.xsd"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-
-  <!-- Other NLog configurations -->
-
-  <targets>
-    <target xsi:type="File" name="fileTarget" fileName="logfile.txt" layout="${longdate} ${message}" />
-  </targets>
-
-  <rules>
-    <!-- Example: Using 'variable1' in a filter -->
-    <logger name="*" minlevel="Trace" writeTo="fileTarget">
-      <filters>
-        <when condition="'${gdc:item=variable1}' == 'value1'" action="Log" />
-      </filters>
-    </logger>
-
-    <!-- Example: Using 'variable2' in a filter -->
-    <logger name="*" minlevel="Trace" writeTo="fileTarget">
-      <filters>
-        <when condition="'${gdc:item=variable2}' == 'value2'" action="Log" />
-      </filters>
-    </logger>
-  </rules>
-
-</nlog>
-
-
-
-
-
-**API Design Documentation:**
-
-Title: API Design Guidelines - Audit Log Attribute and Custom Data Provider for Microservices
-
-Summary: This document outlines the integration of the Audit.NET library into your ASP.NET Core microservices for comprehensive audit logging. It covers the usage of the `AuditLogAttribute` to annotate API endpoints and creating a custom data provider to store audit logs in a database.
-
-Key Points:
-- **AuditLogAttribute**: Learn how to annotate API endpoints across microservices with the `AuditLogAttribute` to automatically capture audit logs for incoming requests.
-
-- **Custom Data Provider**: Understand how to create a custom data provider using ADO.NET to store audit logs in a database, providing a central repository for audit information across microservices.
-
-Code Snippets and Explanation:
-
-1. **AuditLogAttribute Usage:**
-
-```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class UsersController : ControllerBase
-{
-    [HttpGet("{id}")]
-    [AuditLog(Operation = "GetUser", IncludeRequestBody = false)]
-    public async Task<IActionResult> GetUser(int id)
-    {
-        // Retrieve user logic
-        return Ok(user);
-    }
-}
-```
-
-Explanation: The `AuditLogAttribute` is applied to an API endpoint (`GetUser`) to capture audit logs. The `Operation` parameter specifies the name of the operation, and `IncludeRequestBody` determines whether to include request body in the log.
-
-2. **Custom Data Provider with ADO.NET:**
-
-```csharp
-public class CustomDataProvider : AuditDataProvider
-{
-    public override object InsertEvent(AuditEvent auditEvent)
-    {
-        using (var connection = new SqlConnection("YourConnectionString"))
-        {
-            connection.Open();
-            var cmd = connection.CreateCommand();
-            cmd.CommandText = "INSERT INTO AuditLog (EventDate, EventType, Username) VALUES (@EventDate, @EventType, @Username)";
-            cmd.Parameters.AddWithValue("@EventDate", auditEvent.StartDate);
-            cmd.Parameters.AddWithValue("@EventType", auditEvent.Environment.CallingMethodName);
-            cmd.Parameters.AddWithValue("@Username", auditEvent.Environment.UserName);
-            cmd.ExecuteNonQuery();
-        }
-        
-        return null; // No need to return an ID for this example
-    }
-}
-```
-
-```csharp
-public void ConfigureServices(IServiceCollection services)
-{
-    services.AddControllers();
-
-    // Configure Audit.NET to use the custom data provider
-    Audit.Core.Configuration.Setup()
-        .UseCustomProvider(new CustomDataProvider());
-}
-```
-
-Explanation: The `CustomDataProvider` class uses ADO.NET to insert audit events into a database. In the `ConfigureServices` method, the custom data provider is configured in Audit.NET.
-
-**Database Table Design:**
-
-```sql
-CREATE TABLE AuditLog (
-    Id INT IDENTITY(1,1) PRIMARY KEY,
-    EventDate DATETIME NOT NULL,
-    EventType NVARCHAR(100) NOT NULL,
-    Username NVARCHAR(50) NOT NULL
-);
-```
-
-Explanation: The `AuditLog` table stores audit logs with columns for the event date, event type, and username.
-
-By incorporating the `AuditLogAttribute` and a custom data provider with ADO.NET, your microservices gain a powerful audit trail, ensuring accountability and traceability across their interactions.
-
-With this approach, your API design ensures comprehensive audit logging and centralized storage, promoting transparency and security across your microservices ecosystem.
-
-*Note: Be sure to install and reference the Audit.NET NuGet package (`Audit.NET`, `Audit.NET.AspNetCore`, and `System.Data.SqlClient`) in your project to utilize these features.*
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-**API Design Documentation:**
-
-**Title: Comprehensive Audit Logging for Microservices**
-
-**Summary:**
-This documentation outlines the seamless integration of the Audit.NET library into your ASP.NET Core microservices architecture, empowering you with a robust and centralized audit logging mechanism. By utilizing the `AuditLogAttribute` and crafting a custom data provider with ADO.NET, you ensure a meticulous record of every interaction, transaction, and event across your microservices ecosystem.
-
-**Key Components:**
-
-**1. AuditLogAttribute: Enhancing Accountability**
-
-*Usage:*
-```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class UsersController : ControllerBase
-{
-    [HttpGet("{id}")]
-    [AuditLog(Operation = "GetUser", IncludeRequestBody = false)]
-    public async Task<IActionResult> GetUser(int id)
-    {
-        // Retrieve user logic
-        return Ok(user);
-    }
-}
-```
-
-*Explanation:*
-The `AuditLogAttribute` empowers you to annotate API endpoints, such as `GetUser`, automatically capturing audit logs for incoming requests. With configurable parameters like `Operation` and `IncludeRequestBody`, you tailor the granularity of your audit logs to your specific needs.
-
-**2. Custom Data Provider: Centralized Storage**
-
-*Implementation:*
-```csharp
-public class CustomDataProvider : AuditDataProvider
-{
-    public override object InsertEvent(AuditEvent auditEvent)
-    {
-        using (var connection = new SqlConnection("YourConnectionString"))
-        {
-            connection.Open();
-            var cmd = connection.CreateCommand();
-            cmd.CommandText = "INSERT INTO AuditLog (EventDate, EventType, Username) VALUES (@EventDate, @EventType, @Username)";
-            cmd.Parameters.AddWithValue("@EventDate", auditEvent.StartDate);
-            cmd.Parameters.AddWithValue("@EventType", auditEvent.Environment.CallingMethodName);
-            cmd.Parameters.AddWithValue("@Username", auditEvent.Environment.UserName);
-            cmd.ExecuteNonQuery();
-        }
-        
-        return null; // No need to return an ID for this example
-    }
-}
-```
-
-*Configuration:*
-```csharp
-public void ConfigureServices(IServiceCollection services)
-{
-    services.AddControllers();
-
-    // Configure Audit.NET to use the custom data provider
-    Audit.Core.Configuration.Setup()
-        .UseCustomProvider(new CustomDataProvider());
-}
-```
-
-*Explanation:*
-The `CustomDataProvider` class, developed with ADO.NET, empowers you to create a custom storage solution for audit logs. Configured within the `ConfigureServices` method, this data provider ensures centralized storage for audit events across microservices, promoting consistency and facilitating analysis.
-
-**Database Table Design:**
-
-```sql
-CREATE TABLE AuditLog (
-    Id INT IDENTITY(1,1) PRIMARY KEY,
-    EventDate DATETIME NOT NULL,
-    EventType NVARCHAR(100) NOT NULL,
-    Username NVARCHAR(50) NOT NULL
-);
-```
-
-*Explanation:*
-The `AuditLog` table schema represents a central repository for audit logs. Its columns capture crucial information such as event date, event type, and the associated username.
-
-**Conclusion:**
-
-With the amalgamation of the `AuditLogAttribute` and a custom data provider utilizing ADO.NET, your microservices ecosystem gains a resilient and all-encompassing audit trail. This trail paves the way for unparalleled transparency, security, and accountability, ensuring that every interaction within your microservices architecture is meticulously recorded, empowering you with the insights needed to optimize, secure, and evolve your services.
-
-*Note: Ensure the Audit.NET NuGet package (`Audit.NET`, `Audit.NET.AspNetCore`, and `System.Data.SqlClient`) is properly installed and referenced within your project to maximize the benefits of this audit logging strategy.*
-
-
-
-
-
-
-
-
+User Authentication: Internal and external users authenticate through the SSO application to access the Bill Status Application Portal.
+User Registration: Unregistered users can register with the Bill Status Application Portal, providing necessary user information. External users also provide provider information during registration.
+Bill Status Page: After authentication, users are redirected to the Bill Status Page where they can enter search criteria. Internal users have additional options such as searching by bill ID. Users can download attachment files from the search results.
