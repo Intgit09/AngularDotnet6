@@ -1,35 +1,55 @@
 @startuml
+start
+:Start;
+:User Login;
+if (User has access to PAM and PM Bill Review applications?) then (Yes)
+  :System Prompts to Select Application;
+  :User Selects Application;
+elseif (User has access to PAM application only?) then (Yes)
+  :Redirect to PAM Application;
+elseif (User has access to PM Bill Review application only?) then (Yes)
+  :Redirect to PM Bill Review Application;
+else (No access)
+  :Error: No access to any application;
+endif
+:End;
+stop
+@enduml
 
-left to right direction
-skinparam packageStyle rectangle
 
-actor "Internal User" as InternalUser
-actor "External User" as ExternalUser
-actor "SSO Application" as SSOApplication
-actor "Bill Status Application Portal" as BillStatusApp
-actor "Claim Search" as ClaimSearch
-actor "Download Attachment" as DownloadAttachment
 
-rectangle "Use Case Diagram" {
-    rectangle "User Authentication" {
-        InternalUser -- (SSOApplication)
-        ExternalUser -- (SSOApplication)
-        (SSOApplication) -- (BillStatusApp) : Login
-    }
+@startuml
+start
+:Start;
+:User Login;
+if (User has access to multiple applications?) then (Yes)
+  :Show Available Applications;
+  repeat
+    :User Selects Application;
+    if (Application is not Enrolled?) then (Yes)
+      :Process Enrollment Request;
+      break
+    else (No)
+      :Show Application (Enrolled, Disable Enroll Button);
+    endif
+  repeat while (User continues selection);
+else (No)
+  :Continue to Default Application;
+endif
+:End;
+stop
+@enduml
 
-    rectangle "User Registration" {
-        (SSOApplication) -- (BillStatusApp) : Register
-        InternalUser -- (BillStatusApp) : Register (with user info)
-        ExternalUser -- (BillStatusApp) : Register (with user info and provider info)
-    }
 
-    rectangle "Bill Status Page" {
-        (BillStatusApp) -- (ClaimSearch) : Enter Search Criteria
-        (ClaimSearch) -- (ClaimSearch) : Click Search
-        (ClaimSearch) -- (DownloadAttachment) : Click Download
-        InternalUser -- (ClaimSearch) : Search by Bill ID (Pro_Internal)
-        ExternalUser -- (ClaimSearch) : Select Provider (Pro_External)
-    }
-}
-
+@startuml
+start
+:Start;
+:User Registration Request;
+:Provide User Information;
+if (User is External?) then (Yes)
+  :Provide Provider Information;
+endif
+:Complete Registration;
+:End;
+stop
 @enduml
