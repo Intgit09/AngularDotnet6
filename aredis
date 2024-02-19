@@ -1,57 +1,13 @@
-
-# Authentication System Design Documentation
-
-## 1. Introduction
-
-### 1.1 Purpose
-This document outlines the design and implementation of the authentication system, which involves the generation and validation of access tokens using Redis as a token store.
-
-### 1.2 Scope
-The authentication system described here is responsible for handling user access tokens and their validation against a Redis server. It also covers the process of generating and storing IDC (Identity and Claims) tokens.
-
-## 2. Authentication Flow
-
-### 2.1 Access Token Generation
-1. When a user logs in or requests an access token, the system generates a unique access token.
-2. The access token includes user claims and a timestamp for expiration.
-3. This token is returned to the user.
-
-### 2.2 Access Token Validation
-1. When a user makes an authorized API request, they must include the access token in the request header.
-2. The system checks if the access token exists in the Redis server.
-3. If the access token is not in Redis or has expired, the user is required to re-authenticate.
-4. If the access token is valid and present in Redis, the user is allowed access.
-
-### 2.3 IDC Token Creation
-1. If the access token is not found in Redis or has expired, the user needs to authenticate.
-2. Upon successful authentication, the system generates a new IDC token containing user identity and claims.
-3. This IDC token is stored in Redis with an expiration time.
-
-## 3. Redis Integration
-
-### 3.1 Token Storage in Redis
-1. Access tokens are stored in Redis with a time-to-live (TTL) set to their expiration time.
-2. IDC tokens are also stored in Redis with a TTL.
-
-## 4. Error Handling
-
-### 4.1 Unauthorized Access
-1. If a user provides an invalid or expired access token, the system responds with a 401 Unauthorized status code.
-2. The user is prompted to re-authenticate.
-
-## 5. Security Considerations
-
-### 5.1 Token Security
-1. Access tokens should be generated with strong cryptography.
-2. Token transmission should be secure (e.g., over HTTPS).
-
-### 5.2 Redis Security
-1. Redis should be properly secured to prevent unauthorized access.
-
-## 6. Conclusion
-
-This documentation outlines the design and functionality of the authentication system, including access token generation, validation, and IDC token creation using Redis as a token store.
-
----
-
-Please fill in the specific details of your implementation, such as token generation algorithms, Redis setup, and any additional security measures. Additionally, consider including diagrams or code snippets as needed to provide a comprehensive understanding of the authentication system.
+@startuml
+start
+:Start;
+:User Login;
+:Access Default Application;
+:Select Link to Enroll in Another Application;
+:Redirect to Another Application;
+:Process Enrollment Request;
+:Complete Registration;
+:Return to Default Application;
+:End;
+stop
+@enduml
