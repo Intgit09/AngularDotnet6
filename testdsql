@@ -1,55 +1,99 @@
-@startuml
-start
-:Start;
-:User Login;
-if (User has access to PAM and PM Bill Review applications?) then (Yes)
-  :System Prompts to Select Application;
-  :User Selects Application;
-elseif (User has access to PAM application only?) then (Yes)
-  :Redirect to PAM Application;
-elseif (User has access to PM Bill Review application only?) then (Yes)
-  :Redirect to PM Bill Review Application;
-else (No access)
-  :Error: No access to any application;
-endif
-:End;
-stop
-@enduml
+using System;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Polly;
+using Polly.CircuitBreaker;
 
+public class Worker : BackgroundService
+{
+    private readonly ILogger<Worker> _logger;
+    private AsyncCircuitBreakerPolicy _circuitBreakerPolicy;
+    private readonly long memoryLimitBytes = 500 * 1024 * 1024; // 500 MB
+    private readonly TimeSpan circuitBreakDuration = TimeSpan.FromMinutes(1);
+    private bool isMemoryExceeded = false;
 
+    public Worker(ILogger<Worker> logger)
+    {
+        _logger = logger;
 
-@startuml
-start
-:Start;
-:User Login;
-if (User has access to multiple applications?) then (Yes)
-  :Show Available Applications;
-  repeat
-    :User Selects Application;
-    if (Application is not Enrolled?) then (Yes)
-      :Process Enrollment Request;
-      break
-    else (No)
-      :Show Application (Enrolled, Disable Enroll Button);
-    endif
-  repeat while (User continues selection);
-else (No)
-  :Continue to Default Application;
-endif
-:End;
-stop
-@enduml
+        _circuitBreakerPolicy = Policy
+            .Handle<Exception>()
+            .Or<MemoryLimitExceededException>() // Custom exception for memory limit
+            .CircuitBreakerAsync(
+                exceptionsAllowedBeforeBreaking: 2,
+                durationOfBreak: circuitBreakDuration,
+                onBreak: (ex, breakDelay) =>
+                {
+                    _logger.LogWarning($"Breaking the circuit for {breakDelay.TotalSeconds} seconds due to {ex.Message}");
+                },
+                onReset: () =>
+                {
+                    isMemoryExceeded = false;
+                    _logger.LogInformation("Circuit closed. Execution resumed.");
+                },
+                onHalfOpen: () => _logger.LogInformation("Circuit is half-open. Trying to close.")
+            );
+    }
 
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 
-@startuml
-start
-:Start;
-:User Registration Request;
-:Provide User Information;
-if (User is External?) then (Yes)
-  :Provide Provider Information;
-endif
-:Complete Registration;
-:End;
-stop
-@enduml
+            try
+            {
+                // Execute the memory-sensitive task within the circuit breaker policy
+                await _circuitBreakerPolicy.ExecuteAsync(() =>
+                    PerformMemoryIntensiveTask(stoppingToken));
+            }
+            catch (BrokenCircuitException)
+            {
+                _logger.LogWarning("Execution halted. Circuit is open.");
+                await Task.Delay(circuitBreakDuration, stoppingToken); // wait for the circuit to close
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception occurred.");
+            }
+
+            await Task.Delay(10000, stoppingToken); // regular delay between iterations
+        }
+    }
+
+    private Task PerformMemoryIntensiveTask(CancellationToken stoppingToken)
+    {
+        // Check memory usage before executing the task
+        if (GetMemoryUsage() > memoryLimitBytes)
+        {
+            isMemoryExceeded = true;
+            throw new MemoryLimitExceededException("Memory usage has exceeded the limit.");
+        }
+
+        // Simulate a task that consumes memory
+        List<byte[]> memoryConsumingList = new List<byte[]>();
+        for (int i = 0; i < 1000; i++)
+        {
+            memoryConsumingList.Add(new byte[1024 * 1024]); // Add 1 MB of data to the list
+        }
+
+        _logger.LogInformation("Memory-intensive task completed successfully.");
+        return Task.CompletedTask;
+    }
+
+    private long GetMemoryUsage()
+    {
+        using (Process proc = Process.GetCurrentProcess())
+        {
+            return proc.PrivateMemorySize64;
+        }
+    }
+}
+
+public class MemoryLimitExceededException : Exception
+{
+    public MemoryLimitExceededException(string message) : base(message) { }
+}
