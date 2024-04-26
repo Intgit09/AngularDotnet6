@@ -1,73 +1,58 @@
-@startuml
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading.Tasks;
 
-(*) --> "User Login"
-if "User is Unregistered" then
-  --> "Register User"
-  --> "User Login"
-else
-  if "User has Pro_Internal or Pro_External Role" then
-    --> "Redirect to Bill Status Page"
-    --> "Enter Claims Search Criteria"
-    --> "Click Search"
-    --> "Show Search Results in Grid Table"
-    --> "Download Attachment"
-  else
-    --> "Select Provider"
-    --> "Redirect to Bill Status Page"
-    --> "Enter Claims Search Criteria"
-    --> "Click Search"
-    --> "Show Search Results in Grid Table"
-    --> "Download Attachment"
-  endif
-endif
+public class TcpClientTest
+{
+    private readonly string serverAddress;
+    private readonly int port;
 
-@enduml
-
-
-
-Based on the scenario you provided, here is a use case diagram created using PlantUML language:
-
-plantuml
-Copy code
-@startuml
-
-left to right direction
-skinparam packageStyle rectangle
-
-actor "Internal User" as InternalUser
-actor "External User" as ExternalUser
-actor "SSO Application" as SSOApplication
-actor "Bill Status Application Portal" as BillStatusApp
-actor "Claim Search" as ClaimSearch
-actor "Download Attachment" as DownloadAttachment
-
-rectangle "Use Case Diagram" {
-    rectangle "User Authentication" {
-        InternalUser -- (SSOApplication)
-        ExternalUser -- (SSOApplication)
-        (SSOApplication) -- (BillStatusApp) : Login
+    public TcpClientTest(string serverAddress, int port)
+    {
+        this.serverAddress = serverAddress;
+        this.port = port;
     }
 
-    rectangle "User Registration" {
-        (SSOApplication) -- (BillStatusApp) : Register
-        InternalUser -- (BillStatusApp) : Register (with user info)
-        ExternalUser -- (BillStatusApp) : Register (with user info and provider info)
+    public async Task ConnectAndSendMessageAsync(string message)
+    {
+        using (TcpClient client = new TcpClient(serverAddress, port))
+        {
+            Console.WriteLine($"Connected to server: {serverAddress}:{port}");
+
+            using (NetworkStream stream = client.GetStream())
+            {
+                // Send data to the server
+                byte[] data = Encoding.ASCII.GetBytes(message);
+                await stream.WriteAsync(data, 0, data.Length);
+
+                Console.WriteLine($"Sent message: {message}");
+
+                // Optionally, receive a response from the server (unimplemented here)
+                // byte[] buffer = new byte[1024];
+                // int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                // ...
+            }
+        }
     }
 
-    rectangle "Bill Status Page" {
-        (BillStatusApp) -- (ClaimSearch) : Enter Search Criteria
-        (ClaimSearch) -- (ClaimSearch) : Click Search
-        (ClaimSearch) -- (DownloadAttachment) : Click Download
-        InternalUser -- (ClaimSearch) : Search by Bill ID (Pro_Internal)
-        ExternalUser -- (ClaimSearch) : Select Provider (Pro_External)
+    public static void Main(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.WriteLine("Usage: TcpClientTest <server_address> <port>");
+            return;
+        }
+
+        string serverAddress = args[0];
+        int port = int.Parse(args[1]);
+
+        var client = new TcpClientTest(serverAddress, port);
+        string message = "Hello from the client!";
+        client.ConnectAndSendMessageAsync(message).Wait(); // Wait for the async task to finish for demonstration
+
+        Console.WriteLine("Press any key to exit...");
+        Console.ReadKey();
     }
 }
-
-@enduml
-
-
-This diagram represents the use cases described in the scenario:
-
-User Authentication: Internal and external users authenticate through the SSO application to access the Bill Status Application Portal.
-User Registration: Unregistered users can register with the Bill Status Application Portal, providing necessary user information. External users also provide provider information during registration.
-Bill Status Page: After authentication, users are redirected to the Bill Status Page where they can enter search criteria. Internal users have additional options such as searching by bill ID. Users can download attachment files from the search results.
