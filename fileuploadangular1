@@ -1,106 +1,91 @@
-@startuml
-start
-:User Login with SSO;
-if (User Role?) then (Internal)
-  :Click Select Bill Status;
-  if (Enrolled?) then (Yes)
-    :Redirect to Bill Status Page;
-    if (Tab Selected?) then (Claim Search)
-      :Enter Search Criteria;
-      :Display Result;
-      stop
-    elseif (Tab Selected?) then (Bill Search)
-      if (User is Pro Internal?) then (Yes)
-        :Enter Bill ID;
-        :Display Result;
-        stop
-      else (No)
-        :Error: Not Authorized;
-        stop
-      endif
-    endif
-  elseif (Enrolled?) then (No)
-    :Enroll for Bill Status;
-    :Register User;
-    :Redirect to Bill Status Page;
-    :Select Tab (Claim Search);
-    :Enter Search Criteria;
-    :Display Result;
-    stop
-  endif
-elseif (External)
-  :Click Select Bill Status;
-  if (Enrolled?) then (Yes)
-    :Redirect to Bill Status Page;
-    :Select Provider;
-    if (Provider Selected?) then (Yes)
-      :Select Tab (Claim Search);
-      :Enter Search Criteria;
-      :Display Result;
-      stop
-    else (No)
-      :Error: Provider Not Selected;
-      stop
-    endif
-  elseif (Enrolled?) then (No)
-    :Enroll for Bill Status;
-    :Register User;
-    :Redirect to Bill Status Page;
-    :Select Provider;
-    if (Provider Selected?) then (Yes)
-      :Select Tab (Claim Search);
-      :Enter Search Criteria;
-      :Display Result;
-      stop
-    else (No)
-      :Error: Provider Not Selected;
-      stop
-    endif
-  endif
-else
-  :Error: Invalid Role;
-  stop
-endif
-@enduml
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 
+public class NetworkService : BackgroundService
+{
+    private readonly int port;
+    private TcpListener listener;
 
+    public NetworkService(int port)
+    {
+        this.port = port;
+    }
 
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        listener = new TcpListener(IPAddress.Any, port);
+        listener.Start();
 
+        Console.WriteLine($"Server listening on port {port}");
 
-Sure, here's a scenario based on the information you provided:
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
+                Console.WriteLine("Client connected!");
 
-1. **User Login**: 
-   - Users can access the Bill Status Application Portal.
-   - Users have two types of roles: internal user and external user.
-   - Users first log in to the application using Single Sign-On (SSO) authentication.
+                // Start an asynchronous task to handle the client connection
+                _ = Task.Run(async () => await HandleClientAsync(client, stoppingToken));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error accepting client: {ex.Message}");
+            }
+        }
 
-2. **Select Bill Status Enroll**:
-   - After logging in, users click on the "Select Bill Status" option to enroll in the bill status service.
+        listener.Stop();
+    }
 
-3. **Registration**:
-   - If the user is not registered, they need to provide user information for registration.
-   - If the user is an external user, they also need to provide provider information during registration.
+    private async Task HandleClientAsync(TcpClient client, CancellationToken stoppingToken)
+    {
+        using (NetworkStream stream = client.GetStream())
+        {
+            // Read data from the client
+            byte[] buffer = new byte[1024];
+            int bytesRead;
 
-4. **Login after Registration**:
-   - After successful registration, the user logs in to the application again using SSO authentication.
+            while (!stoppingToken.IsCancellationRequested && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, stoppingToken)) > 0)
+            {
+                // Process the received data
+                string data = System.Text.Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                Console.WriteLine($"Received from client {client.Client.RemoteEndPoint}: {data}");
 
-5. **Role Check**:
-   - Upon login, the system checks the user's role.
-   - If the user has either the "pro_internal" or "pro_external" role, they are redirected to the Bill Status Page.
-   
-6. **Bill Status Page**:
-   - The Bill Status Page consists of two tabs: Claim Search and Bill Search.
-   - The Bill Search tab is only visible to users with the "pro_internal" role.
+                // Prepare a response message
+                string response = $"Server response: Hello from the server! (Received: {data})";
+                byte[] responseBytes = Encoding.ASCII.GetBytes(response);
 
-7. **Searching for Bills**:
-   - Users can enter search criteria in the Claim Search tab or input a Bill ID in the Bill Search tab.
-   - Upon submission, the system displays the search results in a grid format below the search tabs.
+                // Send the response back to the client
+                await stream.WriteAsync(responseBytes, 0, responseBytes.Length, stoppingToken);
+            }
+        }
 
-8. **External User Provider Selection**:
-   - If the user is a "pro_external" user, they need to select a provider before being redirected to the Bill Status Page.
+        client.Close();
+        Console.WriteLine("Client disconnected.");
+    }
 
-9. **Result Grid**:
-   - In the result grid, users have the option to download bill attachments in PDF format.
-   - Additionally, users can view payment details associated with the bills.
+    public override async Task StopAsync(CancellationToken stoppingToken)
+    {
+        await base.StopAsync(stoppingToken);
 
-This scenario outlines the sequence of actions and interactions for both internal and external users within the Bill Status Application Portal. Let me know if you need further clarification or if there's anything else you'd like to add!
+        // Gracefully stop the listener
+        listener.Stop();
+    }
+}
+
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        int port = 12345; // Replace with your desired port
+
+        var service = new NetworkService(port);
+        service.Run();
+
+        Console.WriteLine("Press any key to stop the server...");
+        Console.ReadKey();
+    }
+}
