@@ -1,71 +1,90 @@
-public async Task<IActionResult> UploadChunk()
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class NetworkService : BackgroundService
 {
-    // Get chunk information from request headers
-    var chunkIndex = Request.Headers["X-Chunk-Index"];
-    var totalChunks = Request.Headers["X-Total-Chunks"];
+    private readonly int port;
+    private TcpListener listener;
 
-    // Check if all chunks have been received
-    if (string.IsNullOrEmpty(chunkIndex) || string.IsNullOrEmpty(totalChunks))
+    public NetworkService(int port)
     {
-        return BadRequest("Invalid chunk information");
+        this.port = port;
     }
 
-    // Retrieve the uploaded chunk from the request body
-    using (var memoryStream = new MemoryStream())
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Request.Body.CopyToAsync(memoryStream);
-        var chunkBytes = memoryStream.ToArray();
+        listener = new TcpListener(IPAddress.Any, port);
+        listener.Start();
 
-        // Create a unique folder for each file upload
-        var uploadFolder = Path.Combine("Uploads", Guid.NewGuid().ToString());
-        Directory.CreateDirectory(uploadFolder);
+        Console.WriteLine($"Server listening on port {port}");
 
-        // Save the chunk to the upload folder
-        var chunkFileName = $"{chunkIndex}.chunk";
-        var chunkFilePath = Path.Combine(uploadFolder, chunkFileName);
-
-        await System.IO.File.WriteAllBytesAsync(chunkFilePath, chunkBytes);
-    }
-
-    // Check if all chunks have been received
-    var currentChunkIndex = int.Parse(chunkIndex);
-    var totalChunkCount = int.Parse(totalChunks);
-    if (currentChunkIndex == totalChunkCount - 1)
-    {
-        // All chunks have been uploaded, combine the chunks into a single file
-        var mergedFileName = "merged_file.ext"; // Customize the file name and extension
-        var mergedFilePath = Path.Combine("Uploads", mergedFileName); // Customize the path as per your requirements
-
-        using (var mergedFileStream = new FileStream(mergedFilePath, FileMode.Create))
+        while (!stoppingToken.IsCancellationRequested)
         {
-            for (var i = 0; i < totalChunkCount; i++)
+            try
             {
-                var chunkFolder = Path.Combine("Uploads", i.ToString());
-                var chunkFilePath = Path.Combine(chunkFolder, $"{i}.chunk");
+                TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
+                Console.WriteLine("Client connected!");
 
-                if (System.IO.File.Exists(chunkFilePath))
-                {
-                    using (var chunkFileStream = new FileStream(chunkFilePath, FileMode.Open))
-                    {
-                        await chunkFileStream.CopyToAsync(mergedFileStream);
-                    }
-
-                    // Delete the chunk file and its folder after merging
-                    System.IO.File.Delete(chunkFilePath);
-                    Directory.Delete(chunkFolder);
-                }
-                else
-                {
-                    // Handle missing chunk file or other error scenario
-                    return BadRequest("Chunk file is missing or corrupted");
-                }
+                // Start a background task to handle the client connection
+                Task clientTask = HandleClientAsync(client, stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error accepting client: {ex.Message}");
             }
         }
 
-        // Perform further processing or save the merged file as needed
-
-        return Ok("File upload complete.");
+        listener.Stop();
     }
 
-    return Ok("Chunk uploaded successfully.");
+    private async Task HandleClientAsync(TcpClient client, CancellationToken stoppingToken)
+    {
+        using (NetworkStream stream = client.GetStream())
+        {
+            // Read data from the client
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+
+            while (!stoppingToken.IsCancellationRequested && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, stoppingToken)) > 0)
+            {
+                // Process the received data
+                string data = System.Text.Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                Console.WriteLine($"Received from client: {data}");
+
+                // Optionally, send a response back to the client
+                // ...
+
+                // Clear the buffer for the next read
+                Array.Clear(buffer, 0, buffer.Length);
+            }
+        }
+
+        client.Close();
+        Console.WriteLine("Client disconnected.");
+    }
+
+    public override async Task StopAsync(CancellationToken stoppingToken)
+    {
+        await base.StopAsync(stoppingToken);
+
+        // Gracefully stop the listener
+        listener.Stop();
+    }
+}
+
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        int port = 12345; // Replace with your desired port
+
+        var service = new NetworkService(port);
+        service.Run();
+
+        Console.WriteLine("Press any key to stop the server...");
+        Console.ReadKey();
+    }
 }
