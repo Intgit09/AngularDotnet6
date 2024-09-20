@@ -1,99 +1,173 @@
-using System;
-using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Polly;
-using Polly.CircuitBreaker;
+Document: Recommended Setup for Managing Repositories and Build Process for a Large .NET 6 Solution
+1. Overview
+This document outlines the recommended setup for managing a large solution with multiple API projects (such as Pharmacy, Eligibility, etc.) and a dedicated Security API responsible for single sign-on (SSO), token authentication, and CORS. The objective is to separate repositories, streamline the build process, eliminate unnecessary references, and propose a structure that aligns with modern microservices architecture.
 
-public class Worker : BackgroundService
+Currently, the solution uses separate library projects such as:
+
+vp.business.eligibility
+vp.business.interface
+vp.dataaccess.eligibility
+For each API, separate library projects handle business logic and data access. The recommended approach is to move these libraries into their respective API projects as internal folders, avoiding the use of separate class library projects, similar to how microservices structure their codebases.
+
+Additionally, the Security API should remain decoupled from other APIs to avoid cross-project dependencies and should handle all security-related functions for the entire solution. The Security API will be shared as a NuGet package to ensure consistency in security handling across all APIs.
+
+2. Solution Architecture
+The solution consists of the following API projects:
+
+Pharmacy API: Manages pharmacy-related operations.
+Eligibility API: Handles eligibility checks and processes.
+Security API: Centralized API that manages security-related functions like SSO, token authentication, and CORS for the other APIs.
+The Security API should be decoupled from the other APIs, meaning no direct references between the Security API and other projects. It will handle all security-related concerns across the solution, including token authentication and CORS policies. To facilitate reuse and ensure a consistent security model across APIs, the Security API's functionality will be provided as a NuGet package.
+
+3. Repository Structure
+To enhance modularity and ensure clear separation of concerns, the solution should be split into separate repositories. Additionally, business logic and data access layers currently in separate library projects should be moved inside the corresponding API projects.
+
+Recommended Repository Structure:
+Pharmacy API (pharmacy-api-repo)
+
+Contains all pharmacy-related code.
+Folder Structure:
+/Business: Business logic that was previously in vp.business.pharmacy.
+/DataAccess: Data access logic that was previously in vp.dataaccess.pharmacy.
+Independent CI/CD pipeline with Jenkins.
+Eligibility API (eligibility-api-repo)
+
+Contains all eligibility-related code.
+Folder Structure:
+/Business: Business logic that was previously in vp.business.eligibility.
+/DataAccess: Data access logic that was previously in vp.dataaccess.eligibility.
+Independent CI/CD pipeline with Jenkins.
+Security API (security-api-repo)
+
+Central repository for authentication, authorization, and security settings.
+Handles token validation, user sessions, CORS, and SSO configuration.
+Exposes functionality as a NuGet package or via HTTP requests.
+Repository Separation Benefits:
+Modular Development: APIs can be developed, tested, and deployed independently.
+Simplified Project Structure: Business logic and data access logic are now integrated into the respective API projects, avoiding separate class libraries.
+No Unnecessary References: Other APIs will consume the Security API as a NuGet package, ensuring decoupling and eliminating cross-project dependencies.
+4. Folder Structure in Each API
+Instead of creating separate class library projects for business logic and data access, the recommended approach is to move these components inside the API projects as internal folders. This aligns with microservices architecture, where all logic related to a service is self-contained within the service itself.
+
+Example Folder Structure:
+For Eligibility API:
+
+markdown
+Copy code
+/EligibilityApi
+   /Business
+       - EligibilityService.cs
+       - BusinessRules.cs
+   /DataAccess
+       - EligibilityRepository.cs
+       - DbContext.cs
+   /Controllers
+       - EligibilityController.cs
+For Pharmacy API:
+
+markdown
+Copy code
+/PharmacyApi
+   /Business
+       - PharmacyService.cs
+   /DataAccess
+       - PharmacyRepository.cs
+   /Controllers
+       - PharmacyController.cs
+This approach eliminates the need for separate class library projects like vp.business.eligibility and vp.dataaccess.eligibility, keeping everything contained within the respective API.
+
+5. Security API as a NuGet Package
+To ensure that the Security API remains decoupled from other APIs, it will be distributed as a NuGet package. This allows all other APIs to consume the security features, such as token validation and CORS policies, without direct project references.
+
+Steps to Create the Security API as a NuGet Package:
+Develop the Security API:
+
+Create a dedicated repository for the Security API.
+Implement core functionalities such as:
+Token validation and authentication.
+SSO configuration.
+CORS policy handling.
+Package the Security API:
+
+Use the following command to create a NuGet package:
+bash
+Copy code
+dotnet pack
+This command will create a .nupkg file that can be hosted in a private NuGet feed or uploaded to a public package repository.
+Publish the NuGet Package:
+
+If using a private NuGet feed, set up an internal repository (e.g., Azure Artifacts, GitHub Packages, or MyGet).
+Use the following command to publish the package:
+bash
+Copy code
+dotnet nuget push <package-name>.nupkg -k <api-key> -s <server-url>
+Consume the NuGet Package in Other APIs:
+
+In other API projects (e.g., Pharmacy API, Eligibility API), add the Security API NuGet package as a dependency by adding the following line to csproj:
+xml
+Copy code
+<PackageReference Include="SecurityApiPackage" Version="1.0.0" />
+Update the Startup.cs or Program.cs file in each API project to integrate the Security API package:
+csharp
+Copy code
+services.AddAuthentication("Bearer")
+    .AddJwtBearer(options =>
+    {
+        options.Authority = "https://security-api-url";
+        options.Audience = "api-resource";
+    });
+
+services.AddCors(options =>
 {
-    private readonly ILogger<Worker> _logger;
-    private AsyncCircuitBreakerPolicy _circuitBreakerPolicy;
-    private readonly long memoryLimitBytes = 500 * 1024 * 1024; // 500 MB
-    private readonly TimeSpan circuitBreakDuration = TimeSpan.FromMinutes(1);
-    private bool isMemoryExceeded = false;
-
-    public Worker(ILogger<Worker> logger)
+    options.AddPolicy("AllowAllOrigins", builder =>
     {
-        _logger = logger;
+        builder.WithOrigins("https://allowed-origin.com")
+               .AllowAnyHeader()
+               .AllowAnyMethod();
+    });
+});
+NuGet Package Benefits:
+Decoupling: Other APIs do not need direct project references to the Security API, promoting clean architecture principles.
+Reusability: The Security API package can be reused across multiple solutions and projects without duplication of code.
+Version Control: Each API can reference a specific version of the Security API, ensuring compatibility and managing updates easily.
+6. CI/CD Pipeline Setup (Jenkins)
+Each API should have an independent CI/CD pipeline to ensure seamless build, test, and deployment processes. Jenkins will be used for continuous integration and continuous deployment.
 
-        _circuitBreakerPolicy = Policy
-            .Handle<Exception>()
-            .Or<MemoryLimitExceededException>() // Custom exception for memory limit
-            .CircuitBreakerAsync(
-                exceptionsAllowedBeforeBreaking: 2,
-                durationOfBreak: circuitBreakDuration,
-                onBreak: (ex, breakDelay) =>
-                {
-                    _logger.LogWarning($"Breaking the circuit for {breakDelay.TotalSeconds} seconds due to {ex.Message}");
-                },
-                onReset: () =>
-                {
-                    isMemoryExceeded = false;
-                    _logger.LogInformation("Circuit closed. Execution resumed.");
-                },
-                onHalfOpen: () => _logger.LogInformation("Circuit is half-open. Trying to close.")
-            );
-    }
+CI/CD Pipeline Steps:
+Build:
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+Use dotnet build to compile the solution.
+Run dotnet restore to fetch dependencies, including the Security API NuGet package.
+Unit Tests:
 
-            try
-            {
-                // Execute the memory-sensitive task within the circuit breaker policy
-                await _circuitBreakerPolicy.ExecuteAsync(() =>
-                    PerformMemoryIntensiveTask(stoppingToken));
-            }
-            catch (BrokenCircuitException)
-            {
-                _logger.LogWarning("Execution halted. Circuit is open.");
-                await Task.Delay(circuitBreakDuration, stoppingToken); // wait for the circuit to close
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unhandled exception occurred.");
-            }
+Run dotnet test to execute unit tests, ensuring isolated testing for each API.
+Code Quality Checks:
 
-            await Task.Delay(10000, stoppingToken); // regular delay between iterations
-        }
-    }
+Implement static code analysis (e.g., SonarQube) to maintain code quality.
+Build Security API First:
 
-    private Task PerformMemoryIntensiveTask(CancellationToken stoppingToken)
-    {
-        // Check memory usage before executing the task
-        if (GetMemoryUsage() > memoryLimitBytes)
-        {
-            isMemoryExceeded = true;
-            throw new MemoryLimitExceededException("Memory usage has exceeded the limit.");
-        }
+Ensure that the Security API is built and deployed first, as other APIs depend on it for authentication and authorization.
+Deployment (IIS Server):
 
-        // Simulate a task that consumes memory
-        List<byte[]> memoryConsumingList = new List<byte[]>();
-        for (int i = 0; i < 1000; i++)
-        {
-            memoryConsumingList.Add(new byte[1024 * 1024]); // Add 1 MB of data to the list
-        }
+Package APIs into Docker containers and deploy them to the IIS server.
+Use Jenkins to automate the deployment pipeline.
+7. Dependency Management
+To avoid unnecessary dependencies across projects:
 
-        _logger.LogInformation("Memory-intensive task completed successfully.");
-        return Task.CompletedTask;
-    }
+No Direct References Between APIs: Ensure that no API directly references another API's project files. All communication should happen via HTTP, using well-defined contracts and API versioning.
 
-    private long GetMemoryUsage()
-    {
-        using (Process proc = Process.GetCurrentProcess())
-        {
-            return proc.PrivateMemorySize64;
-        }
-    }
-}
+NuGet for Shared Security: Other APIs will rely on the Security API's NuGet package for token validation and CORS, ensuring consistency without direct references.
 
-public class MemoryLimitExceededException : Exception
-{
-    public MemoryLimitExceededException(string message) : base(message) { }
-}
+8. Security Configuration
+The Security API manages CORS, token validation, and authentication for all other APIs. To streamline security:
+
+CORS Configuration:
+
+Define allowed origins centrally in the Security API and expose them to other APIs via the NuGet package or a configuration endpoint.
+Token Authentication:
+
+Implement token validation logic in the Security API.
+Other APIs should validate tokens using the Security API via middleware provided in the NuGet package.
+9. Conclusion
+By transitioning from separate library projects to integrated folder structures within each API, the solution becomes more modular and aligned with microservices architecture. The Security API will remain decoupled by being shared as a NuGet package, ensuring reusability and a consistent security model across APIs. The CI/CD pipeline, managed via Jenkins, ensures a streamlined build and deployment process, and hosting on IIS servers allows for stable and scalable operations.
+
